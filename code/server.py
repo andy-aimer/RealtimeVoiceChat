@@ -28,11 +28,14 @@ from contextlib import asynccontextmanager
 # Phase 1: Import custom exceptions
 from exceptions import (
     RealtimeVoiceChatException,
-    ValidationError,
+    ValidationError as ExceptionValidationError,
     HealthCheckError,
     MonitoringError,
     SecurityViolation
 )
+
+# Phase 1: Import security validators
+from security.validators import validate_message, ValidationError as ValidatorError
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -324,6 +327,7 @@ async def health_check():
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
+        # Phase 1 T037: Don't expose exception details to clients
         return Response(
             content=json.dumps({
                 "error": "Health check failed",
@@ -358,13 +362,16 @@ async def metrics_endpoint():
         )
     except MonitoringError as e:
         logger.error(f"Metrics collection failed: {e}")
+        # Phase 1 T037: Sanitize error message to prevent path leaks
+        safe_message = sanitize_error_message(e)
         return Response(
-            content=f"# ERROR: Metrics collection failed\n# {e.message}\n",
+            content=f"# ERROR: Metrics collection failed\n# {safe_message}\n",
             status_code=500,
             media_type="text/plain"
         )
     except Exception as e:
         logger.error(f"Unexpected metrics error: {e}", exc_info=True)
+        # Phase 1 T037: Generic error message without details
         return Response(
             content="# ERROR: Unexpected metrics error\n",
             status_code=500,
@@ -375,6 +382,37 @@ async def metrics_endpoint():
 # --------------------------------------------------------------------
 # Utility functions
 # --------------------------------------------------------------------
+def sanitize_error_message(error: Exception) -> str:
+    """
+    Sanitize error messages to prevent system path leaks (T037).
+    
+    Removes absolute paths and sensitive system information from error messages
+    while keeping the error type and general message.
+    
+    Args:
+        error: The exception to sanitize
+        
+    Returns:
+        Sanitized error message safe for client exposure
+    """
+    import re
+    error_str = str(error)
+    
+    # Remove common system path patterns
+    # Match paths like /Users/..., /home/..., C:\Users\..., etc.
+    error_str = re.sub(r'/Users/[^\s]+', '[PATH]', error_str)
+    error_str = re.sub(r'/home/[^\s]+', '[PATH]', error_str)
+    error_str = re.sub(r'C:\\Users\\[^\s]+', '[PATH]', error_str)
+    error_str = re.sub(r'/opt/[^\s]+', '[PATH]', error_str)
+    error_str = re.sub(r'/var/[^\s]+', '[PATH]', error_str)
+    
+    # Remove full file paths from traceback snippets
+    error_str = re.sub(r'File "([^"]+)"', 'File "[REDACTED]"', error_str)
+    
+    # Return sanitized message with error type
+    return f"{type(error).__name__}: {error_str}"
+
+
 def parse_json_message(text: str) -> dict:
     """
     Safely parses a JSON string into a dictionary.
@@ -484,6 +522,24 @@ async def process_incoming_data(ws: WebSocket, app: FastAPI, incoming_chunks: as
             elif "text" in msg and msg["text"]:
                 # Text-based message: parse JSON
                 data = parse_json_message(msg["text"])
+                
+                # Phase 1: Validate incoming message (T036)
+                is_valid, validation_errors = validate_message(data)
+                if not is_valid:
+                    error_response = {
+                        "type": "validation_error",
+                        "errors": [
+                            {"field": e.field, "message": e.message}
+                            for e in validation_errors
+                        ]
+                    }
+                    await ws.send_json(error_response)
+                    logger.warning(
+                        "Validation failed for incoming message",
+                        extra={"errors": [e.dict() for e in validation_errors]}
+                    )
+                    continue
+                
                 msg_type = data.get("type")
                 logger.info(Colors.apply(f"🖥️📥 ←←Client: {data}").orange)
 
