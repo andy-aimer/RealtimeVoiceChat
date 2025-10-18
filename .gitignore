@@ -57,3 +57,13 @@ logs/
 *.tmp
 *.bak
 *.swp
+
+# Model files (too large for GitHub)
+code/models/**/*.pth
+code/models/**/*.bin
+code/models/**/*.onnx
+code/models/**/*.safetensors
+*.pth
+*.bin
+*.onnx
+*.safetensors
