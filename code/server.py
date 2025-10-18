@@ -1,8 +1,11 @@
 # server.py
 from queue import Queue, Empty
 import logging
-from logsetup import setup_logging
-setup_logging(logging.INFO)
+
+# Phase 1: Use structured JSON logging
+from middleware.logging import setup_structured_logging
+setup_structured_logging(level="INFO")
+
 logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     logger.info("🖥️👋 Welcome to local real-time voice chat")
@@ -21,6 +24,15 @@ import os # Added for environment variable access
 
 from typing import Any, Dict, Optional, Callable # Added for type hints in docstrings
 from contextlib import asynccontextmanager
+
+# Phase 1: Import custom exceptions
+from exceptions import (
+    RealtimeVoiceChatException,
+    ValidationError,
+    HealthCheckError,
+    MonitoringError,
+    SecurityViolation
+)
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -177,6 +189,188 @@ async def get_index() -> HTMLResponse:
     with open("static/index.html", "r", encoding="utf-8") as f:
         html_content = f.read()
     return HTMLResponse(content=html_content)
+
+
+# --------------------------------------------------------------------
+# Phase 1: Health & Monitoring Endpoints
+# --------------------------------------------------------------------
+from health_checks import (
+    check_audio_processor,
+    check_llm_backend,
+    check_tts_engine,
+    check_system_resources,
+    COMPONENT_TIMEOUT
+)
+from metrics import get_metrics
+from datetime import datetime, timezone
+import time
+
+# Health check cache
+_health_cache = {"result": None, "timestamp": 0}
+_health_cache_ttl = 30  # seconds
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for Phase 1 Foundation.
+    
+    Checks:
+    - Audio processor status
+    - LLM backend connectivity
+    - TTS engine availability
+    - System resources (CPU/RAM/swap)
+    
+    Response caching: 30s TTL
+    Component timeout: 5s per component (parallel execution)
+    Total timeout: 10s
+    
+    Returns:
+        200: All components healthy
+        503: One or more components degraded/unhealthy
+        500: Health check failed
+    """
+    global _health_cache
+    
+    # Check cache
+    current_time = time.time()
+    if _health_cache["result"] and (current_time - _health_cache["timestamp"]) < _health_cache_ttl:
+        logger.debug("Returning cached health check result")
+        return _health_cache["result"]
+    
+    try:
+        # Run all checks in parallel with timeout
+        check_tasks = [
+            check_audio_processor(),
+            check_llm_backend(),
+            check_tts_engine(),
+            check_system_resources()
+        ]
+        
+        # Wait for all checks with 10s total timeout
+        results = await asyncio.wait_for(
+            asyncio.gather(*check_tasks, return_exceptions=True),
+            timeout=10.0
+        )
+        
+        # Process results
+        components = {}
+        overall_status = "healthy"
+        
+        for result in results:
+            if isinstance(result, Exception):
+                # Handle exceptions from checks
+                if isinstance(result, HealthCheckError):
+                    components[result.context["component"]] = "unhealthy"
+                    overall_status = "unhealthy"
+                else:
+                    # Unknown exception
+                    logger.error(f"Health check exception: {result}")
+                    return Response(
+                        content=json.dumps({
+                            "error": "Health check failed",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }),
+                        status_code=500,
+                        media_type="application/json"
+                    )
+            else:
+                # Successful check
+                component = result["component"]
+                status = result["status"]
+                components[component] = status
+                
+                # Update overall status
+                if status == "unhealthy":
+                    overall_status = "unhealthy"
+                elif status == "degraded" and overall_status == "healthy":
+                    overall_status = "degraded"
+        
+        # Build response
+        response_data = {
+            "status": overall_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "components": components
+        }
+        
+        # Determine HTTP status code
+        status_code = 200
+        if overall_status == "degraded" or overall_status == "unhealthy":
+            status_code = 503
+        
+        response = Response(
+            content=json.dumps(response_data),
+            status_code=status_code,
+            media_type="application/json"
+        )
+        
+        # Update cache
+        _health_cache = {
+            "result": response,
+            "timestamp": current_time
+        }
+        
+        return response
+        
+    except asyncio.TimeoutError:
+        logger.error("Health check timed out (10s)")
+        return Response(
+            content=json.dumps({
+                "error": "Health check timeout",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }),
+            status_code=500,
+            media_type="application/json"
+        )
+    except Exception as e:
+        logger.error(f"Health check failed: {e}", exc_info=True)
+        return Response(
+            content=json.dumps({
+                "error": "Health check failed",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }),
+            status_code=500,
+            media_type="application/json"
+        )
+
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    """
+    Metrics endpoint for Phase 1 Foundation.
+    
+    Exposes system metrics in Prometheus plain text format:
+    - system_memory_available_bytes
+    - system_cpu_temperature_celsius
+    - system_cpu_percent
+    - system_swap_usage_bytes
+    
+    Returns:
+        200: Metrics in Prometheus format
+        500: Metrics collection failed
+    """
+    try:
+        metrics_text = get_metrics()
+        return Response(
+            content=metrics_text,
+            status_code=200,
+            media_type="text/plain; version=0.0.4"
+        )
+    except MonitoringError as e:
+        logger.error(f"Metrics collection failed: {e}")
+        return Response(
+            content=f"# ERROR: Metrics collection failed\n# {e.message}\n",
+            status_code=500,
+            media_type="text/plain"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected metrics error: {e}", exc_info=True)
+        return Response(
+            content="# ERROR: Unexpected metrics error\n",
+            status_code=500,
+            media_type="text/plain"
+        )
+
 
 # --------------------------------------------------------------------
 # Utility functions

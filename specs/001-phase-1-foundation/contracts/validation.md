@@ -108,16 +108,29 @@ All WebSocket messages must follow this structure:
    - Block: Control characters (except `\n`, `\t`), null bytes
    - Replace: Emojis with `[emoji]` placeholder (optional)
 
-3. **Prompt Injection Prevention:**
+3. **Prompt Injection Prevention (Phase 1: Detection Only):**
 
-   - Detect and sanitize patterns:
-     - "Ignore previous instructions"
-     - "Disregard all prior context"
-     - "You are now a [different persona]"
-   - Strategy: Log warning, optionally strip suspicious phrases
+   - Detect patterns (case-insensitive matching):
+     - `"ignore previous instructions"` → Log WARNING, allow through
+     - `"disregard all prior context"` → Log WARNING, allow through
+     - `"you are now a"` followed by persona description → Log WARNING, allow through
+     - `"system:"` or `"assistant:"` (role spoofing) → Log WARNING, allow through
+     - `"<|system|>"`, `"<|user|>"`, `"<|assistant|>"` → Log WARNING, allow through
+   - **Detection Strategy**:
+     - Use regex patterns for flexibility
+     - Log all detections with request context (timestamp, message preview)
+     - **Phase 1 Action**: Log only, do not block or modify message
+     - **Phase 3 Enhancement**: Add configurable stripping/rejection for internet-exposed deployments
+   - **False Positive Handling**: Legitimate phrases like "Can you ignore case?" should not trigger (use context-aware patterns)
+   - **Rationale**: Personal/offline deployment has no adversarial threat model; detection provides visibility without blocking legitimate use
 
 4. **Special Token Escaping:**
    - Escape model-specific tokens (e.g., `<|endoftext|>`, `###`, `</s>`)
+   - **Comprehensive Token List**:
+     - OpenAI format: `<|endoftext|>`, `<|im_start|>`, `<|im_end|>`, `<|system|>`, `<|user|>`, `<|assistant|>`
+     - Common delimiters: `###`, `</s>`, `<s>`, `[INST]`, `[/INST]`, `<<SYS>>`, `<</SYS>>`
+     - Llama-specific: `### Instruction:`, `### Response:`
+   - **Action**: Strip entirely (replace with empty string) or replace with safe equivalent
    - Replace with safe equivalents or strip
 
 **Example Sanitization:**
@@ -183,6 +196,18 @@ def sanitize_text(text: str) -> str:
 }
 ```
 
+**Response Headers (if HTTP):**
+
+```
+Content-Type: application/json
+```
+
+**WebSocket Close Codes (for critical failures):**
+
+- `1003` - Unsupported Data (malformed JSON)
+- `1008` - Policy Violation (rate limit exceeded)
+- `1009` - Message Too Big (>1MB)
+
 ### Error Codes
 
 | Code                   | HTTP Status | Description                         | User Action                                    |
@@ -197,6 +222,37 @@ def sanitize_text(text: str) -> str:
 | `INVALID_CHARACTERS`   | 400         | Text contains disallowed characters | Remove control characters                      |
 | `INVALID_LANGUAGE`     | 400         | Invalid ISO 639-1 language code     | Use valid code (e.g., "en")                    |
 | `INVALID_ACTION`       | 400         | Unknown control action              | Use "interrupt", "pause", "resume", or "reset" |
+
+---
+
+## Error Response Consistency
+
+**All error responses (WebSocket and HTTP) follow the same JSON structure:**
+
+```json
+{
+  "type": "error",
+  "data": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable description",
+    "field": "data.field_name",
+    "received_value": "<truncated>"
+  }
+}
+```
+
+**Field Specifications:**
+
+- `type`: Always `"error"` for error responses
+- `data.code`: Machine-readable error code (SCREAMING_SNAKE_CASE)
+- `data.message`: User-friendly explanation of the error
+- `data.field`: (Optional) JSON path to the field that caused the error (e.g., `"data.text"`, `"data.audio.chunk"`)
+- `data.received_value`: (Optional) Truncated value that caused the error (max 100 chars, for debugging)
+
+**HTTP vs WebSocket:**
+
+- **HTTP**: Return error JSON with appropriate HTTP status code (400, 413, 429, 500)
+- **WebSocket**: Send error JSON as message, optionally close connection with close code for critical errors
 
 ---
 

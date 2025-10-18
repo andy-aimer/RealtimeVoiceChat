@@ -1,0 +1,184 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # Stage 1: Code Quality
+  quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: pip install flake8 black isort
+      - name: Check formatting
+        run: black --check code/ tests/
+      - name: Lint
+        run: flake8 code/ tests/ --max-line-length=120
+
+  # Stage 2: Unit Tests
+  unit-tests:
+    name: Unit Tests
+    needs: quality
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Run unit tests
+        run: |
+          pytest tests/unit/ -v --junitxml=junit-${{ matrix.python-version }}.xml
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results-${{ matrix.python-version }}
+          path: junit-${{ matrix.python-version }}.xml
+
+  # Stage 3: Integration Tests
+  integration-tests:
+    name: Integration Tests
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y portaudio19-dev ffmpeg
+          pip install -r requirements.txt
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v --timeout=300
+        continue-on-error: true
+
+  # Stage 4: Coverage
+  coverage:
+    name: Code Coverage
+    needs: [unit-tests, integration-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run coverage
+        run: |
+          pytest --cov=code --cov-report=xml --cov-report=term
+      - name: Check threshold
+        run: |
+          COVERAGE=$(python -c "import xml.etree.ElementTree as ET; print(float(ET.parse('coverage.xml').getroot().attrib['line-rate'])*100)")
+          echo "Coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < 60" | bc -l) )); then
+            echo "::error::Coverage below 60%"
+            exit 1
+          fi
+
+  # Stage 5: Monitoring Validation
+  monitoring:
+    name: Monitoring Endpoints
+    needs: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install fastapi uvicorn psutil httpx
+      - name: Test monitoring
+        run: |
+          python test_server_monitoring.py &
+          sleep 5
+          curl -f http://localhost:8000/health
+          curl -f http://localhost:8000/metrics
+
+  # Stage 6: Security Scan
+  security:
+    name: Security Scan
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Bandit
+        run: |
+          pip install bandit
+          bandit -r code/ -ll || true
+
+  # Stage 7: Pi 5 Validation
+  pi5-validation:
+    name: Pi 5 Constraints
+    needs: [unit-tests, monitoring]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate constraints
+        run: |
+          # Check file sizes
+          find code/ -name "*.py" | while read f; do
+            lines=$(wc -l < "$f")
+            if [ $lines -gt 300 ]; then
+              echo "::error::$f exceeds 300 lines"
+              exit 1
+            fi
+          done
+
+  # Final Stage: Generate Report
+  report:
+    name: Generate Report
+    needs:
+      [
+        quality,
+        unit-tests,
+        integration-tests,
+        coverage,
+        monitoring,
+        security,
+        pi5-validation,
+      ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+      - name: Generate summary
+        run: |
+          echo "# CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Quality: ${{ needs.quality.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Integration: ${{ needs.integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage: ${{ needs.coverage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Monitoring: ${{ needs.monitoring.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Pi5 Validation: ${{ needs.pi5-validation.result }}" >> $GITHUB_STEP_SUMMARY

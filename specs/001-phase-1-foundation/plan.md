@@ -40,7 +40,7 @@ _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
 ### Principle 0: Offline-First Architecture
 
-✅ **PASS** - All monitoring components (health checks, metrics, validation) operate without network dependencies. Uses psutil for local system metrics, no cloud API calls.
+✅ **PASS** - All monitoring components (health checks, metrics, validation) operate without network dependencies. Uses psutil for local system metrics, no cloud API calls. Python library dependencies (pytest, psutil, FastAPI) are acceptable; external service dependencies (cloud APIs, remote databases) are not allowed for personal/offline deployment.
 
 ### Principle 1: Reliability First
 
@@ -103,7 +103,7 @@ specs/[###-feature]/
 
 ```
 code/
-├── health_checks.py           # NEW: Component health check functions
+├── health_checks.py           # NEW: Component health check functions (async, parallel execution)
 ├── metrics.py                 # NEW: System metrics collection (Prometheus format)
 ├── server.py                  # MODIFIED: Add /health and /metrics endpoints
 ├── monitoring/
@@ -111,7 +111,7 @@ code/
 ├── middleware/
 │   └── logging.py            # NEW: Structured JSON logging middleware
 ├── security/
-│   └── validators.py         # NEW: Input validation (required for all deployments)
+│   └── validators.py         # NEW: Input validation (required for all deployments, log-only prompt injection detection)
 └── [existing modules: audio_module.py, llm_module.py, etc.]
 
 tests/

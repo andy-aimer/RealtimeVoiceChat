@@ -44,6 +44,7 @@ All components are healthy.
 
 ```
 Content-Type: application/json
+Cache-Control: max-age=30
 ```
 
 **Body:**
@@ -100,6 +101,7 @@ Some non-critical components are unhealthy, but system can still operate.
 
 ```
 Content-Type: application/json
+Cache-Control: no-cache
 ```
 
 **Body:**
@@ -113,7 +115,10 @@ Content-Type: application/json
     "tts": false,
     "system": true
   },
-  "timestamp": "2025-10-17T14:32:01.150Z"
+  "timestamp": "2025-10-17T14:32:01.150Z",
+  "details": {
+    "tts": "Piper engine not loaded"
+  }
 }
 ```
 
@@ -121,6 +126,13 @@ Content-Type: application/json
 
 - `tts = false`: System can still transcribe and generate text responses (no audio output)
 - `system = false`: High CPU/RAM/temp, but still functional
+
+**Optional Details Field:**
+
+- **Type**: Object (key = component name, value = diagnostic string)
+- **Max Length**: 500 characters per component
+- **When Included**: Only when component is unhealthy or degraded
+- **Purpose**: Provide actionable diagnostic info for operators
 
 ---
 
@@ -132,6 +144,7 @@ Critical components are down, system cannot operate.
 
 ```
 Content-Type: application/json
+Cache-Control: no-cache
 ```
 
 **Body:**
@@ -164,6 +177,7 @@ Health check itself failed (rare).
 
 ```
 Content-Type: application/json
+Cache-Control: no-cache
 ```
 
 **Body:**
@@ -221,16 +235,18 @@ Content-Type: application/json
 ✅ **Healthy if:**
 
 - Available RAM > 1GB
-- CPU temp < 80°C (on Pi 5)
+- CPU temp < 75°C (optimal) OR 75-79°C (approaching throttle, log WARNING)
 - CPU usage < 95%
 - Swap usage < 2GB
 
 ❌ **Unhealthy if:**
 
 - Available RAM < 500MB (critical)
-- CPU temp ≥ 80°C (throttling)
+- CPU temp ≥ 80°C (throttling active)
 - CPU usage ≥ 95% (sustained)
 - Swap usage ≥ 4GB (thrashing)
+
+**Note:** Temperature range 75-79°C is considered healthy with warning to alert operators before throttling begins at 80°C.
 
 ---
 

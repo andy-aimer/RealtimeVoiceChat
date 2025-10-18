@@ -1,0 +1,61 @@
+[tool.black]
+line-length = 120
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | venv
+  | venv-py312
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 120
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+skip_gitignore = true
+skip = [".venv", "venv", "venv-py312", ".git"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+check_untyped_defs = true
+
+[tool.pylint.messages_control]
+disable = [
+    "C0111", # missing-docstring
+    "C0103", # invalid-name
+    "R0903", # too-few-public-methods
+]
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "pi5: marks tests requiring Pi 5 hardware",
+]

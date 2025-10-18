@@ -1,0 +1,153 @@
+name: Monitoring Endpoints
+
+on:
+  push:
+    branches: [main, develop, "001-phase-1-foundation"]
+    paths:
+      - "code/health_checks.py"
+      - "code/metrics.py"
+      - "code/monitoring/**"
+      - "code/exceptions.py"
+      - "tests/integration/test_monitoring.py"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "code/health_checks.py"
+      - "code/metrics.py"
+      - "code/monitoring/**"
+
+jobs:
+  test-monitoring:
+    name: Test Monitoring Endpoints
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi uvicorn pytest pytest-asyncio httpx psutil
+
+      - name: Run standalone monitoring tests
+        run: |
+          python test_monitoring_standalone.py
+
+      - name: Start test monitoring server
+        run: |
+          python test_server_monitoring.py &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+
+          # Wait for server to start
+          echo "Waiting for server to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health > /dev/null; then
+              echo "Server started successfully"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Test /health endpoint
+        run: |
+          echo "Testing /health endpoint..."
+          RESPONSE=$(curl -s http://localhost:8000/health)
+          echo "Response: $RESPONSE"
+
+          # Validate JSON structure
+          echo "$RESPONSE" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          assert 'status' in data, 'Missing status field'
+          assert 'timestamp' in data, 'Missing timestamp field'
+          assert 'components' in data, 'Missing components field'
+          assert len(data['components']) == 4, f'Expected 4 components, got {len(data[\"components\"])}'
+          print('✓ Health endpoint validation passed')
+          "
+
+      - name: Test /metrics endpoint
+        run: |
+          echo "Testing /metrics endpoint..."
+          RESPONSE=$(curl -s http://localhost:8000/metrics)
+          echo "$RESPONSE"
+
+          # Validate Prometheus format
+          echo "$RESPONSE" | python3 -c "
+          import sys
+          content = sys.stdin.read()
+
+          required_metrics = [
+              'system_memory_available_bytes',
+              'system_cpu_temperature_celsius',
+              'system_cpu_percent',
+              'system_swap_usage_bytes'
+          ]
+
+          for metric in required_metrics:
+              assert metric in content, f'Missing metric: {metric}'
+
+          assert '# HELP' in content, 'Missing HELP comments'
+          assert '# TYPE' in content, 'Missing TYPE declarations'
+          print('✓ Metrics endpoint validation passed')
+          "
+
+      - name: Test response caching
+        run: |
+          echo "Testing response caching..."
+          RESPONSE1=$(curl -s http://localhost:8000/health | python3 -c "import sys,json; print(json.load(sys.stdin)['timestamp'])")
+          sleep 2
+          RESPONSE2=$(curl -s http://localhost:8000/health | python3 -c "import sys,json; print(json.load(sys.stdin)['timestamp'])")
+
+          if [ "$RESPONSE1" == "$RESPONSE2" ]; then
+            echo "✓ Caching working: timestamps match"
+          else
+            echo "✗ Caching failed: timestamps don't match"
+            exit 1
+          fi
+
+      - name: Test response headers
+        run: |
+          echo "Testing /health headers..."
+          curl -v http://localhost:8000/health 2>&1 | grep -i "content-type: application/json" || exit 1
+          echo "✓ Health endpoint headers correct"
+
+          echo "Testing /metrics headers..."
+          curl -v http://localhost:8000/metrics 2>&1 | grep -i "content-type: text/plain" || exit 1
+          echo "✓ Metrics endpoint headers correct"
+
+      - name: Performance benchmark
+        run: |
+          echo "Benchmarking endpoint performance..."
+
+          # Health endpoint latency
+          START=$(date +%s%N)
+          for i in {1..10}; do
+            curl -s http://localhost:8000/health > /dev/null
+          done
+          END=$(date +%s%N)
+          LATENCY=$(( ($END - $START) / 10000000 ))  # Convert to ms
+          echo "Health endpoint avg latency: ${LATENCY}ms (target: <500ms)"
+
+          # Metrics endpoint latency
+          START=$(date +%s%N)
+          for i in {1..10}; do
+            curl -s http://localhost:8000/metrics > /dev/null
+          done
+          END=$(date +%s%N)
+          LATENCY=$(( ($END - $START) / 10000000 ))
+          echo "Metrics endpoint avg latency: ${LATENCY}ms (target: <50ms)"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID || true
+          fi

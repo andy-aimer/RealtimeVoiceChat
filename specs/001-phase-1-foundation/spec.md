@@ -39,12 +39,42 @@ Establish foundational testing, monitoring, and security infrastructure for the 
   - LLM backend connectivity (llama.cpp/Ollama)
   - TTS engine availability (Piper)
   - System resources (CPU/RAM/swap)
+  - **Response Format**: JSON with `Content-Type: application/json` header
+  - **Response Caching**: Results cached for 30s to minimize overhead
+  - **Component Check Timeout**: 5s per component (all 4 checks run in parallel using asyncio.gather)
+  - **Total Endpoint Timeout**: 10s (includes 5s parallel checks + overhead + error handling)
+  - **Optional Details Field**: May include component-specific diagnostic info (max 500 chars per component)
 - `/metrics` endpoint with resource metrics:
   - `system_memory_available_bytes` (gauge)
   - `system_cpu_temperature_celsius` (gauge) - Critical for Pi 5 throttling detection
+    - **Pi 5 Platform**: Read from `/sys/class/thermal/thermal_zone0/temp` or `vcgencmd measure_temp`
+    - **Non-Pi Platforms**: Return `-1` to indicate unavailable
+    - **Thermal Thresholds**: 75°C warning (approaching throttle), 80°C critical (CPU throttling active)
+    - **Throttling Behavior**: When CPU temp ≥80°C, system status = "unhealthy", reduce workload or shutdown recommended
   - `system_cpu_percent` (gauge)
   - `system_swap_usage_bytes` (gauge)
+  - **Response Format**: Prometheus plain text format with `Content-Type: text/plain; version=0.0.4` header
+  - **Polling Frequency**: 1Hz internal updates (metrics updated every second)
+  - **Latency Target**: <50ms response time (p99)
 - Basic structured logging (JSON format)
+  - **Log Fields**:
+    - Required: `timestamp` (ISO 8601), `level`, `logger`, `message`
+    - Optional: `component`, `session_id`, additional context in `context` object
+  - **Log Levels**: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  - **Example Format**:
+    ```json
+    {
+      "timestamp": "2025-10-18T14:32:01.123Z",
+      "level": "INFO",
+      "logger": "realtimevoicechat.server",
+      "message": "WebSocket connection established",
+      "context": {
+        "session_id": "abc123",
+        "component": "websocket_handler",
+        "remote_addr": "127.0.0.1:54321"
+      }
+    }
+    ```
 - Component status tracking
 
 #### 1.3 Security Basics
@@ -52,16 +82,45 @@ Establish foundational testing, monitoring, and security infrastructure for the 
 **For All Deployments:**
 
 - Input validation for JSON messages (prevent malformed data crashes)
+  - **Message Size Limit**: 1MB maximum (1,048,576 bytes) measured on raw message to prevent memory exhaustion
+  - **Text Length Limit**: 5,000 characters maximum, applied **after** Unicode normalization (NFC) and **before** sanitization
+  - **Justification**: Balances user experience (long messages) with DoS protection on Pi 5 (8GB RAM)
 - Sanitize user text input (prevent injection attacks on LLM)
+
+3. **Prompt Injection Prevention (Phase 1: Detection Only):**
+
+   - **Detect and log** patterns like:
+     - `"ignore previous instructions"` (case-insensitive)
+     - `"disregard all prior context"` (case-insensitive)
+     - `"you are now a [different persona]"` (pattern matching)
+     - `"system:"` or `"assistant:"` (role spoofing attempts)
+   - **Action**: Log WARNING with request context (timestamp, message preview), allow message through
+   - **Rationale**: Personal/offline deployment has no threat model requiring blocking
+   - **Phase 3**: Add configurable stripping/rejection for internet-exposed deployments
+
+   - **Special Token Escaping**: Strip model-specific tokens:
+     - `<|endoftext|>`, `<|im_start|>`, `<|im_end|>` (OpenAI format)
+     - `###`, `</s>`, `[INST]`, `[/INST]` (common LLM delimiters)
+   - **Character Filtering**: Allow Unicode letters, digits, whitespace, punctuation; block control characters except `\n` and `\t`
+
 - Error message sanitization (don't leak system paths)
+  - **Never expose**: File paths, environment variables, API keys, internal IPs
+  - **Generic errors**: Replace specific exceptions with user-friendly messages
+  - **Error Response Format**: Consistent JSON structure for both WebSocket and HTTP:
+    ```json
+    {
+      "type": "error",
+      "data": {
+        "code": "ERROR_CODE",
+        "message": "User-friendly description",
+        "field": "data.field_name"
+      }
+    }
+    ```
 
-**For Internet-Exposed Deployments (Optional):**
+**For Internet-Exposed Deployments:**
 
-- API key authentication for WebSocket
-- Rate limiting (per IP/user):
-  - 5 concurrent connections per IP
-  - 100 messages per minute per connection
-- Secrets manager for API keys
+_Note: Advanced security features (API key authentication, rate limiting, secrets management) are **deferred to Phase 3: Security Hardening**. Phase 1 focuses on input validation only._
 
 ### Out of Scope
 
@@ -69,6 +128,108 @@ Establish foundational testing, monitoring, and security infrastructure for the 
 - Advanced metrics (latency histograms, request tracing) - minimizing overhead for Pi 5
 - Circuit breakers and advanced error recovery (deferred to Phase 2)
 - Full Prometheus/Grafana stack (using lightweight metrics only)
+- **API key authentication** (deferred to Phase 3: Security Hardening)
+- **Rate limiting** (deferred to Phase 3: Security Hardening)
+- **Secrets manager integration** (deferred to Phase 3: Security Hardening)
+
+---
+
+## Edge Cases & Error Handling
+
+### Boundary Conditions
+
+1. **Message Size Boundaries**
+   - Exactly 1MB message: REJECT with `MESSAGE_TOO_LARGE` error
+   - Exactly 5,000 characters: ACCEPT (boundary is inclusive)
+2. **Temperature Boundaries**
+
+   - Below 75°C: Status = "healthy", no warning (optimal operating range)
+   - 75-79°C: Status = "healthy", log WARNING (approaching throttle threshold)
+   - Exactly 80°C or above: Status = "unhealthy", log CRITICAL (CPU throttling active)
+   - Above 85°C: Status = "unhealthy", consider emergency shutdown (log CRITICAL, notify operator)
+
+3. **Memory Boundaries**
+
+   - Exactly 1GB available: Status = "degraded", log WARNING
+   - Exactly 500MB available: Status = "unhealthy", log CRITICAL
+   - Below 100MB available: High risk of OOM, emergency measures
+
+4. **Swap Usage Boundaries**
+
+   - Below 2GB swap: Status = "healthy", normal operation
+   - Exactly 2GB swap: Status = "degraded", log WARNING (memory pressure)
+   - Exactly 4GB swap: Status = "unhealthy", log CRITICAL (thrashing likely)
+   - Above 6GB swap: System severely constrained, performance degraded
+
+5. **Component Timeouts**
+   - Component check at exactly 5s: TIMEOUT, mark component as unhealthy
+   - Health endpoint at exactly 10s: Return 500 Internal Server Error
+
+### Platform-Specific Behavior
+
+1. **CPU Temperature on Non-Pi Platforms**
+
+   - **Unsupported platforms** (macOS/Windows/Linux non-Pi): Return `-1` for `system_cpu_temperature_celsius`
+   - **Special value `-1`**: Indicates "temperature monitoring unavailable" (not an error)
+   - **Detection method**: Check for `/sys/class/thermal/thermal_zone0/temp` or `vcgencmd` availability
+   - **Behavior**: Fallback gracefully, no errors logged, monitoring systems should handle `-1` as valid value
+   - **Metrics output**: Include `-1` in Prometheus format (parseable by standard tools)
+
+2. **Permission Issues**
+   - If `/sys/class/thermal/` is not readable: Return `-1` (no error)
+   - If `vcgencmd` requires root and not available: Return `-1` (no error)
+
+### Concurrent Request Handling
+
+1. **Health Check Caching**
+
+   - Multiple concurrent `/health` requests within 30s window: Return cached result
+   - First request triggers actual checks, subsequent requests get cached response
+   - Cache invalidation: 30s expiry or manual invalidation on config change
+
+2. **Metrics Polling Under Load**
+   - If metrics request arrives during high CPU load (>95%): Still respond within 50ms using cached values
+   - Metrics update loop runs at 1Hz regardless of request frequency
+
+### Data Edge Cases
+
+1. **Empty or Null Values**
+
+   - Empty log message: Use default message `"No message provided"`
+   - Null component status: Treat as unhealthy (fail-safe)
+
+2. **Metric Value Anomalies**
+
+   - CPU usage > 100%: Cap at 100% (psutil may report >100% on multi-core)
+   - Negative memory values: Log error, return 0 (fail-safe)
+
+3. **Malformed Structured Logs**
+
+   - If JSON serialization fails: Fall back to plain text log
+   - If timestamp is invalid: Use current system time
+
+4. **Unicode and Special Characters**
+   - Emoji in text input: Preserve (Unicode is allowed)
+   - Null bytes (`\x00`): Strip (security risk)
+   - Invalid UTF-8 sequences: Replace with Unicode replacement character `�`
+
+### Error Recovery
+
+1. **Component Check Failures**
+
+   - If health check crashes: Return 500 error, log stack trace
+   - If single component check times out: Mark that component unhealthy, continue checking others
+
+2. **Metrics Collection Failures**
+
+   - If psutil call fails: Return last known value, log WARNING
+   - If all metrics fail: Return 500 error
+
+3. **Validation Errors**
+   - Multiple validation errors in one message: Return all errors in array
+   - Critical validation failure (e.g., cannot parse JSON): Disconnect WebSocket with close code 1003
+
+---
 
 ## Technical Approach
 
@@ -78,6 +239,26 @@ Establish foundational testing, monitoring, and security infrastructure for the 
 2. **Monitoring**: Edge-optimized metrics are preferred over comprehensive monitoring to minimize resource consumption and avoid performance degradation on Raspberry Pi 5. Monitoring the Pi 5 CPU temperature is critical. The warning threshold is set at 75°C, and the throttling threshold is set at 80°C to prevent hardware slowdowns.
 3. **Security**: Deployment-dependent approach (minimal for personal/offline, robust for internet-exposed)
 4. **Logging**: Structured JSON logging for easier parsing and log aggregation on constrained devices, reducing parsing overhead and supporting lightweight monitoring solutions.
+
+### Performance Targets
+
+1. **Health Check Endpoint**
+
+   - **Target Latency**: <500ms (p95) when all components healthy
+   - **Maximum Latency**: 10s (hard timeout for entire endpoint)
+   - **Component Check Strategy**: All 4 checks run in parallel using `asyncio.gather()` with 5s timeout per component
+   - **Calculation**: 4 components checked in parallel = max 5s (slowest component) + ~0.5s overhead ≈ 5.5s worst case
+   - **Note**: 500ms target achievable when components respond quickly (<100ms each)
+   - **Implementation**: Use `asyncio.wait_for()` with timeout on the gather call
+
+2. **Metrics Endpoint**
+
+   - **Target Latency**: <50ms (p99)
+   - **Strategy**: Return cached values updated at 1Hz
+
+3. **Validation**
+   - **Target Latency**: <10ms per message
+   - **Strategy**: Lightweight regex and size checks only
 
 ### File Structure
 
@@ -101,10 +282,7 @@ code/
   middleware/
     logging.py                       # Structured logging middleware
   security/
-    validators.py                    # Input validation (required)
-    auth.py                          # Authentication (optional)
-    rate_limiter.py                  # Rate limiting (optional)
-    secrets.py                       # Secrets manager (optional)
+    validators.py                    # Input validation (required for all deployments)
 ```
 
 ## Success Criteria
@@ -138,8 +316,8 @@ code/
 
 ### External Dependencies
 
-- None for personal/offline deployment
-- Secrets manager (e.g., HashiCorp Vault, AWS Secrets Manager) for internet-exposed deployments
+- **Personal/Offline Deployment**: No external service dependencies (Python library dependencies are acceptable)
+- **Internet-Exposed Deployment** (Phase 3): Secrets manager integration (e.g., HashiCorp Vault, AWS Secrets Manager) optional
 
 ### Constitution Alignment
 
