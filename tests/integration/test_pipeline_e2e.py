@@ -403,7 +403,8 @@ class TestStreamingPipeline:
             chunk_size = 100
             for i in range(0, len(text), chunk_size):
                 time.sleep(0.05)
-                yield bytes([i] * chunk_size)
+                # Use modulo to keep byte value in valid range (0-255)
+                yield bytes([(i // chunk_size) % 256] * chunk_size)
         
         start = time.perf_counter()
         first_audio_time = None
