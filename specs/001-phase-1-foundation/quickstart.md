@@ -48,7 +48,7 @@ psutil==5.9.6
 ### 1.2 Install Dependencies
 
 ```bash
-cd /Users/Tom/dev-projects/RealtimeVoiceChat
+cd <project-root>  # Replace with the path to your RealtimeVoiceChat directory
 source venv/bin/activate  # Or your venv path
 pip install -r requirements.txt
 ```
