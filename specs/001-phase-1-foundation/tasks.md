@@ -145,7 +145,7 @@ pytest tests/integration/test_interruption_handling.py
 - [x] T025 [P] [US2] Implement check_tts_engine() async function in code/health_checks.py
 - [x] T026 [P] [US2] Implement check_system_resources() async function in code/health_checks.py with RAM/CPU/swap thresholds
 - [x] T027 [US2] Add GET /health endpoint to code/server.py with async health checks using asyncio.gather() for parallel execution (5s timeout per component, 10s total endpoint timeout)
-- [x] T028 [P] [US2] Implement get_cpu_temperature() in code/metrics.py with platform-specific detection (vcgencmd for Pi 5, -1 fallback)
+- [x] T028 [P] [US2] Implement get_cpu_temperature() in code/metrics.py with platform-specific detection (/sys/class/thermal primary, vcgencmd fallback for Pi 5, -1 for other platforms)
 - [x] T029 [P] [US2] Implement get_metrics() in code/metrics.py returning Prometheus plain text format (max 80 lines total for file)
 - [x] T030 [US2] Add GET /metrics endpoint to code/server.py returning Prometheus format with 1Hz cached metrics
 - [x] T031 [US2] Create code/monitoring/pi5_monitor.py with Pi 5 specific resource monitoring and 75°C/80°C temperature alerts
@@ -191,7 +191,8 @@ pytest tests/integration/test_interruption_handling.py
 
 - [ ] T032 [P] [US3] Create ValidationError Pydantic model in code/security/validators.py (max 80 lines total for file)
 - [ ] T033 [P] [US3] Create WebSocketMessage Pydantic model in code/security/validators.py with type validation (audio/text/control)
-- [ ] T034 [P] [US3] Create TextData Pydantic model in code/security/validators.py with text sanitization (5000 char max, prompt injection detection with log-only, no blocking)
+- [ ] T034 [P] [US3] Create TextData Pydantic model in code/security/validators.py with text sanitization (5000 char max, prompt injection detection with log-only, no blocking, unicode edge case handling)
+- [ ] T034.1 [P] [US3] Add unicode edge case tests to test_security_validators.py (emoji preservation, null byte stripping, invalid UTF-8 handling)
 - [ ] T035 [P] [US3] Implement validate_message() function in code/security/validators.py returning tuple[bool, List[ValidationError]]
 - [ ] T036 [US3] Integrate validate_message() into WebSocket handler in code/server.py with error response on validation failure
 - [ ] T037 [US3] Add error sanitization to all exception handlers in code/server.py to prevent system path leaks

@@ -30,7 +30,9 @@ Establish foundational testing, monitoring, and security infrastructure for the 
 - Integration tests:
   - **Full STT → LLM → TTS pipeline** (end-to-end latency validation, target: <1.8s)
   - **User interruption handling** (mid-generation cancellation, cleanup verification)
-- Target: 60% code coverage minimum
+- Coverage Targets:
+  - **Personal/Offline Deployment**: 60% code coverage minimum (Phase 1-2)
+  - **Production/Internet Deployment**: 80% code coverage target (Phase 3+, per constitution)
 
 #### 1.2 Health Checks & Monitoring
 
@@ -47,10 +49,8 @@ Establish foundational testing, monitoring, and security infrastructure for the 
 - `/metrics` endpoint with resource metrics:
   - `system_memory_available_bytes` (gauge)
   - `system_cpu_temperature_celsius` (gauge) - Critical for Pi 5 throttling detection
-    - **Pi 5 Platform**: Read from `/sys/class/thermal/thermal_zone0/temp` or `vcgencmd measure_temp`
+    - **Pi 5 Platform**: Read from `/sys/class/thermal/thermal_zone0/temp` (primary) or `vcgencmd measure_temp` (fallback)
     - **Non-Pi Platforms**: Return `-1` to indicate unavailable
-    - **Thermal Thresholds**: 75°C warning (approaching throttle), 80°C critical (CPU throttling active)
-    - **Throttling Behavior**: When CPU temp ≥80°C, system status = "unhealthy", reduce workload or shutdown recommended
   - `system_cpu_percent` (gauge)
   - `system_swap_usage_bytes` (gauge)
   - **Response Format**: Prometheus plain text format with `Content-Type: text/plain; version=0.0.4` header
@@ -120,7 +120,7 @@ Establish foundational testing, monitoring, and security infrastructure for the 
 
 **For Internet-Exposed Deployments:**
 
-_Note: Advanced security features (API key authentication, rate limiting, secrets management) are **deferred to Phase 3: Security Hardening**. Phase 1 focuses on input validation only._
+_Note: Advanced security features (API key authentication, rate limiting, secrets management) are **intentionally deferred to Phase 3: Security Hardening** per constitution Principle 3 (Security is deployment-dependent). Phase 1 targets personal/offline deployment where these features are not required. This is a documented architectural decision, not an oversight._
 
 ### Out of Scope
 
@@ -147,6 +147,13 @@ _Note: Advanced security features (API key authentication, rate limiting, secret
    - 75-79°C: Status = "healthy", log WARNING (approaching throttle threshold)
    - Exactly 80°C or above: Status = "unhealthy", log CRITICAL (CPU throttling active)
    - Above 85°C: Status = "unhealthy", consider emergency shutdown (log CRITICAL, notify operator)
+   
+   **Phase 1 Behavior:** Passive monitoring only (log warnings, update health status)
+   
+   **Phase 2 Enhancement (Planned):** Automatic workload reduction
+   - At 75°C: Log WARNING, continue normal operation
+   - At 80°C: System status = "unhealthy", log CRITICAL, continue operation
+   - At 85°C: Reduce LLM workload (lower temperature parameter) or pause TTS processing
 
 3. **Memory Boundaries**
 
@@ -212,6 +219,7 @@ _Note: Advanced security features (API key authentication, rate limiting, secret
    - Emoji in text input: Preserve (Unicode is allowed)
    - Null bytes (`\x00`): Strip (security risk)
    - Invalid UTF-8 sequences: Replace with Unicode replacement character `�`
+   - **Testing Required (Phase 1)**: Validate emoji preservation, null byte stripping, and invalid UTF-8 handling in security validator tests
 
 ### Error Recovery
 
