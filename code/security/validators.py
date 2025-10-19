@@ -52,7 +52,15 @@ class TextData(BaseModel):
     @classmethod
     def validate_and_sanitize(cls, v: str) -> str:
         """Validate text length and detect prompt injection."""
-        # Check length limit
+        # Strip null bytes (security risk per spec)
+        if "\x00" in v:
+            logger.warning(
+                "Null bytes detected and stripped from input",
+                extra={"original_length": len(v)}
+            )
+            v = v.replace("\x00", "")
+        
+        # Check length limit (after null byte removal)
         if len(v) > 5000:
             raise ValueError(f"Text exceeds 5000 character limit: {len(v)} chars")
         

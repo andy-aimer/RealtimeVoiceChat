@@ -147,10 +147,11 @@ _Note: Advanced security features (API key authentication, rate limiting, secret
    - 75-79°C: Status = "healthy", log WARNING (approaching throttle threshold)
    - Exactly 80°C or above: Status = "unhealthy", log CRITICAL (CPU throttling active)
    - Above 85°C: Status = "unhealthy", consider emergency shutdown (log CRITICAL, notify operator)
-   
+
    **Phase 1 Behavior:** Passive monitoring only (log warnings, update health status)
-   
+
    **Phase 2 Enhancement (Planned):** Automatic workload reduction
+
    - At 75°C: Log WARNING, continue normal operation
    - At 80°C: System status = "unhealthy", log CRITICAL, continue operation
    - At 85°C: Reduce LLM workload (lower temperature parameter) or pause TTS processing

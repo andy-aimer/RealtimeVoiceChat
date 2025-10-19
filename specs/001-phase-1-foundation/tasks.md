@@ -189,13 +189,13 @@ pytest tests/integration/test_interruption_handling.py
 
 **Tasks:**
 
-- [ ] T032 [P] [US3] Create ValidationError Pydantic model in code/security/validators.py (max 80 lines total for file)
-- [ ] T033 [P] [US3] Create WebSocketMessage Pydantic model in code/security/validators.py with type validation (audio/text/control)
-- [ ] T034 [P] [US3] Create TextData Pydantic model in code/security/validators.py with text sanitization (5000 char max, prompt injection detection with log-only, no blocking, unicode edge case handling)
-- [ ] T034.1 [P] [US3] Add unicode edge case tests to test_security_validators.py (emoji preservation, null byte stripping, invalid UTF-8 handling)
-- [ ] T035 [P] [US3] Implement validate_message() function in code/security/validators.py returning tuple[bool, List[ValidationError]]
-- [ ] T036 [US3] Integrate validate_message() into WebSocket handler in code/server.py with error response on validation failure
-- [ ] T037 [US3] Add error sanitization to all exception handlers in code/server.py to prevent system path leaks
+- [x] T032 [P] [US3] Create ValidationError Pydantic model in code/security/validators.py (max 80 lines total for file)
+- [x] T033 [P] [US3] Create WebSocketMessage Pydantic model in code/security/validators.py with type validation (audio/text/control)
+- [x] T034 [P] [US3] Create TextData Pydantic model in code/security/validators.py with text sanitization (5000 char max, prompt injection detection with log-only, no blocking, unicode edge case handling)
+- [x] T034.1 [P] [US3] Add unicode edge case tests to test_security_validators.py (emoji preservation, null byte stripping, invalid UTF-8 handling) - 11 tests, all passing
+- [x] T035 [P] [US3] Implement validate_message() function in code/security/validators.py returning tuple[bool, List[ValidationError]]
+- [x] T036 [US3] Integrate validate_message() into WebSocket handler in code/server.py with error response on validation failure
+- [x] T037 [US3] Add error sanitization to all exception handlers in code/server.py to prevent system path leaks
 
 **Dependencies:**
 

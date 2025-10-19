@@ -17,14 +17,14 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 ## Analysis Findings
 
-| ID | Category | Severity | Location(s) | Summary | Recommendation |
-|----|----------|----------|-------------|---------|----------------|
-| C1 | Constitution | MEDIUM | spec.md, constitution.md | Coverage target mismatch: Constitution shows "60% minimum" for personal deployment, "80% for production" but spec.md only mentions 60% | Clarify in Phase 2 spec: Personal=60%, Production=80% |
-| A1 | Ambiguity | LOW | spec.md:L48 | "Critical for Pi 5 throttling detection" - no behavioral specification when detection occurs | Phase 2: Add automatic workload reduction or user notification when temp ≥75°C |
-| D1 | Duplication | LOW | spec.md:L55-58, L66-73 | Temperature threshold documented twice (inline and in "Thermal Thresholds") | Consolidate into single authoritative location |
-| T1 | Terminology | LOW | tasks.md:T028 vs spec.md | "vcgencmd for Pi 5" vs spec mentions both vcgencmd and /sys/class/thermal | Standardize to primary method + fallback chain |
-| U1 | Underspecification | MEDIUM | spec.md Security Basics | "Optional authentication" mentioned but no tasks created for auth implementation | ✅ Correctly deferred to Phase 2+ (deployment-dependent principle) |
-| G1 | Coverage Gap | LOW | spec.md:L210-215 Edge Cases | Unicode/special character handling specified but no explicit test coverage in tasks | Add test task in Phase 2 for unicode edge cases |
+| ID  | Category           | Severity | Location(s)                 | Summary                                                                                                                                | Recommendation                                                                 |
+| --- | ------------------ | -------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| C1  | Constitution       | MEDIUM   | spec.md, constitution.md    | Coverage target mismatch: Constitution shows "60% minimum" for personal deployment, "80% for production" but spec.md only mentions 60% | Clarify in Phase 2 spec: Personal=60%, Production=80%                          |
+| A1  | Ambiguity          | LOW      | spec.md:L48                 | "Critical for Pi 5 throttling detection" - no behavioral specification when detection occurs                                           | Phase 2: Add automatic workload reduction or user notification when temp ≥75°C |
+| D1  | Duplication        | LOW      | spec.md:L55-58, L66-73      | Temperature threshold documented twice (inline and in "Thermal Thresholds")                                                            | Consolidate into single authoritative location                                 |
+| T1  | Terminology        | LOW      | tasks.md:T028 vs spec.md    | "vcgencmd for Pi 5" vs spec mentions both vcgencmd and /sys/class/thermal                                                              | Standardize to primary method + fallback chain                                 |
+| U1  | Underspecification | MEDIUM   | spec.md Security Basics     | "Optional authentication" mentioned but no tasks created for auth implementation                                                       | ✅ Correctly deferred to Phase 2+ (deployment-dependent principle)             |
+| G1  | Coverage Gap       | LOW      | spec.md:L210-215 Edge Cases | Unicode/special character handling specified but no explicit test coverage in tasks                                                    | Add test task in Phase 2 for unicode edge cases                                |
 
 **Total Issues:** 6 (0 CRITICAL, 2 MEDIUM, 4 LOW)
 
@@ -34,20 +34,20 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 ### Requirements → Tasks Mapping
 
-| Requirement Key | Has Task? | Task IDs | Implementation Status |
-|-----------------|-----------|----------|----------------------|
-| testing-infrastructure | ✅ | T013-T022 | Complete (163+ tests) |
-| health-endpoint | ✅ | T023-T027 | Complete (operational) |
-| metrics-endpoint | ✅ | T028-T031 | Complete (operational) |
-| structured-logging | ✅ | T009-T010 | Complete (JSON format) |
-| input-validation | ✅ | T032-T037 | Complete (Pydantic) |
-| prompt-injection-detection | ✅ | T034 | Complete (log-only) |
-| session-storage | ❌ | None | Pre-existing (in-memory dict) |
-| optional-auth | ❌ | None | Deferred (deployment-dependent) |
-| rate-limiting | ❌ | None | Deferred (deployment-dependent) |
-| error-recovery | ⚠️ | Partial (T011-T012) | Exception hierarchy created |
-| unicode-handling | ❌ | None | Implemented but not tested |
-| cache-invalidation | ❌ | None | Not specified in tasks |
+| Requirement Key            | Has Task? | Task IDs            | Implementation Status           |
+| -------------------------- | --------- | ------------------- | ------------------------------- |
+| testing-infrastructure     | ✅        | T013-T022           | Complete (163+ tests)           |
+| health-endpoint            | ✅        | T023-T027           | Complete (operational)          |
+| metrics-endpoint           | ✅        | T028-T031           | Complete (operational)          |
+| structured-logging         | ✅        | T009-T010           | Complete (JSON format)          |
+| input-validation           | ✅        | T032-T037           | Complete (Pydantic)             |
+| prompt-injection-detection | ✅        | T034                | Complete (log-only)             |
+| session-storage            | ❌        | None                | Pre-existing (in-memory dict)   |
+| optional-auth              | ❌        | None                | Deferred (deployment-dependent) |
+| rate-limiting              | ❌        | None                | Deferred (deployment-dependent) |
+| error-recovery             | ⚠️        | Partial (T011-T012) | Exception hierarchy created     |
+| unicode-handling           | ❌        | None                | Implemented but not tested      |
+| cache-invalidation         | ❌        | None                | Not specified in tasks          |
 
 **Coverage Rate:** 75% (9/12 explicit requirements mapped to tasks)
 
@@ -57,14 +57,14 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 **All 6 Principles: ✅ COMPLIANT**
 
-| Principle | Status | Evidence |
-|-----------|--------|----------|
-| 0. Offline-First | ✅ PASS | All monitoring uses local psutil, no cloud APIs |
-| 1. Reliability First | ✅ PASS | Health check timeouts, async execution, exception hierarchy |
-| 2. Observability | ✅ PASS | Edge-optimized metrics, JSON logging, 1.46% overhead achieved |
-| 3. Security | ✅ PASS | Deployment-dependent approach correctly applied |
-| 4. Maintainability | ✅ PASS | All Phase 1 files <200 lines (max: 191, 36% below 300 limit) |
-| 5. Testability | ✅ PASS | 163+ tests created, individual files achieve coverage |
+| Principle            | Status  | Evidence                                                      |
+| -------------------- | ------- | ------------------------------------------------------------- |
+| 0. Offline-First     | ✅ PASS | All monitoring uses local psutil, no cloud APIs               |
+| 1. Reliability First | ✅ PASS | Health check timeouts, async execution, exception hierarchy   |
+| 2. Observability     | ✅ PASS | Edge-optimized metrics, JSON logging, 1.46% overhead achieved |
+| 3. Security          | ✅ PASS | Deployment-dependent approach correctly applied               |
+| 4. Maintainability   | ✅ PASS | All Phase 1 files <200 lines (max: 191, 36% below 300 limit)  |
+| 5. Testability       | ✅ PASS | 163+ tests created, individual files achieve coverage         |
 
 **No constitution violations detected.**
 
@@ -72,18 +72,18 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 ## Implementation vs. Specification
 
-| Spec Item | Planned | Actual | Delta | Status |
-|-----------|---------|--------|-------|--------|
-| Task Count | 42 | 42 | 0 | ✅ 100% |
-| Test Count | "15-17 tests" | 163+ tests | +146 | ✅ 10x exceeded |
-| Code Files | 8 (350 lines) | 8 (743 lines) | +393 | ✅ Within budget |
-| File Size Limit | ≤300 lines | Max 191 lines | -109 | ✅ 36% below limit |
-| Test Coverage | ≥60% | Unable to measure* | - | ⚠️ Technical limitation |
-| Pipeline Latency | <1.8s | Validated ✅ | Met | ✅ Target achieved |
-| Monitoring Overhead | <2% CPU | 1.46% | -0.54% | ✅ 27% below target |
-| Health Response | <500ms p95 | 10-50ms | -450ms | ✅ 10x better |
+| Spec Item           | Planned       | Actual              | Delta  | Status                  |
+| ------------------- | ------------- | ------------------- | ------ | ----------------------- |
+| Task Count          | 42            | 42                  | 0      | ✅ 100%                 |
+| Test Count          | "15-17 tests" | 163+ tests          | +146   | ✅ 10x exceeded         |
+| Code Files          | 8 (350 lines) | 8 (743 lines)       | +393   | ✅ Within budget        |
+| File Size Limit     | ≤300 lines    | Max 191 lines       | -109   | ✅ 36% below limit      |
+| Test Coverage       | ≥60%          | Unable to measure\* | -      | ⚠️ Technical limitation |
+| Pipeline Latency    | <1.8s         | Validated ✅        | Met    | ✅ Target achieved      |
+| Monitoring Overhead | <2% CPU       | 1.46%               | -0.54% | ✅ 27% below target     |
+| Health Response     | <500ms p95    | 10-50ms             | -450ms | ✅ 10x better           |
 
-*Test suite hanging issue documented in TEST_SUITE_KNOWN_ISSUES.md with workarounds
+\*Test suite hanging issue documented in TEST_SUITE_KNOWN_ISSUES.md with workarounds
 
 ---
 
@@ -92,6 +92,7 @@ Phase 1 Foundation specification has been **validated against implementation** w
 ### C1: Coverage Target Consistency (MEDIUM)
 
 **Locations:**
+
 - spec.md: "Target: 60% code coverage minimum" (L27)
 - constitution.md: "60% minimum for personal, 80% for production" (Principle 5)
 
@@ -101,9 +102,11 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 **Current State:** Phase 1 targets personal deployment (60%), which is correct, but not explicitly stated.
 
-**Recommendation:** 
+**Recommendation:**
+
 ```markdown
 # In spec.md, update to:
+
 - Target: 60% code coverage minimum (personal deployment)
 - Production deployment: 80% code coverage target (future phases)
 ```
@@ -120,7 +123,8 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 **Issue:** Specification states temperature monitoring is "critical" but doesn't specify what action occurs when throttling is detected (75°C warning, 80°C critical).
 
-**Current State:** 
+**Current State:**
+
 - Monitoring implemented ✅
 - Temperature thresholds defined ✅
 - Health status changes to "unhealthy" ✅
@@ -129,8 +133,10 @@ Phase 1 Foundation specification has been **validated against implementation** w
 **Impact:** System passively reports temperature but doesn't take corrective action.
 
 **Recommendation:**
+
 ```markdown
 # Add to spec.md thermal thresholds section:
+
 - At 75°C: Log WARNING, continue operation
 - At 80°C: System status = "unhealthy", log CRITICAL
 - At 85°C (optional Phase 2): Reduce LLM workload or pause processing
@@ -145,6 +151,7 @@ Phase 1 Foundation specification has been **validated against implementation** w
 **Location:** spec.md:L210-215
 
 **Specified:**
+
 ```markdown
 4. **Unicode and Special Characters**
    - Emoji in text input: Preserve (Unicode is allowed)
@@ -155,14 +162,17 @@ Phase 1 Foundation specification has been **validated against implementation** w
 **Issue:** Edge cases specified but no explicit test task in T013-T022.
 
 **Current State:**
+
 - Pydantic validators handle unicode ✅
 - No explicit test coverage for edge cases ⚠️
 
 **Impact:** Functionality works but not validated by tests.
 
 **Recommendation:**
+
 ```markdown
 # Add to tasks.md Phase 3 (or create Phase 2 test enhancement):
+
 - [ ] T023 [P] [US1] Add unicode edge case tests to test_security_validators.py
   - Test emoji preservation
   - Test null byte stripping
@@ -177,6 +187,7 @@ Phase 1 Foundation specification has been **validated against implementation** w
 ### D1: Temperature Threshold Duplication (LOW)
 
 **Locations:**
+
 - spec.md:L55-58 (inline in metrics section)
 - spec.md:L66-73 ("Thermal Thresholds" subsection)
 
@@ -193,6 +204,7 @@ Phase 1 Foundation specification has been **validated against implementation** w
 ### T1: Terminology Inconsistency (LOW)
 
 **Locations:**
+
 - tasks.md T028: "vcgencmd for Pi 5"
 - spec.md: "Read from `/sys/class/thermal/thermal_zone0/temp` or `vcgencmd measure_temp`"
 
@@ -216,7 +228,8 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 **Status:** ✅ **CORRECTLY DEFERRED** per constitution Principle 3 (Security is deployment-dependent)
 
-**Rationale:** 
+**Rationale:**
+
 - Phase 1 targets personal/offline deployment
 - Authentication not needed for localhost-only use
 - Deferred to Phase 2+ for internet-exposed deployments
@@ -243,19 +256,19 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 ## Metrics
 
-| Metric | Value |
-|--------|-------|
-| Total Explicit Requirements | 12 |
-| Total Tasks | 42 |
-| Requirements with Tasks | 9 |
-| Coverage % | 75% (9/12) |
-| Ambiguity Count | 1 (LOW) |
-| Duplication Count | 1 (LOW) |
-| Critical Issues | 0 |
-| High Issues | 0 |
-| Medium Issues | 2 |
-| Low Issues | 4 |
-| Constitution Violations | 0 |
+| Metric                      | Value      |
+| --------------------------- | ---------- |
+| Total Explicit Requirements | 12         |
+| Total Tasks                 | 42         |
+| Requirements with Tasks     | 9          |
+| Coverage %                  | 75% (9/12) |
+| Ambiguity Count             | 1 (LOW)    |
+| Duplication Count           | 1 (LOW)    |
+| Critical Issues             | 0          |
+| High Issues                 | 0          |
+| Medium Issues               | 2          |
+| Low Issues                  | 4          |
+| Constitution Violations     | 0          |
 
 ---
 
@@ -286,6 +299,7 @@ Phase 1 Foundation specification has been **validated against implementation** w
 ### Recommended: ✅ **PROCEED TO PHASE 2**
 
 **Rationale:**
+
 - ✅ All critical requirements delivered (100%)
 - ✅ No constitution violations (0/6)
 - ✅ No blocking issues (0 CRITICAL, 0 HIGH)
@@ -302,18 +316,22 @@ Phase 1 Foundation specification has been **validated against implementation** w
 **Can be incorporated into Phase 2 planning:**
 
 1. **Clarify coverage targets** (C1 - MEDIUM)
+
    - Update spec.md to differentiate 60% (personal) vs. 80% (production)
    - Add deployment type context to coverage requirements
 
 2. **Add unicode test task** (G1 - LOW)
+
    - Create explicit test task for unicode edge cases
    - Validate emoji, null bytes, invalid UTF-8 handling
 
 3. **Specify temperature behavior** (A1 - LOW)
+
    - Document what happens at each threshold (75°C, 80°C, 85°C)
    - Add Phase 2 enhancement for automatic workload reduction
 
 4. **Consolidate threshold docs** (D1 - LOW)
+
    - Merge duplicate temperature threshold documentation
    - Maintain single source of truth
 
@@ -328,11 +346,13 @@ Phase 1 Foundation specification has been **validated against implementation** w
 **From TEST_SUITE_KNOWN_ISSUES.md:**
 
 1. **HIGH PRIORITY:** Fix thread cleanup in `turndetect.py`
+
    - Enable full test suite execution without hanging
    - Implement proper `__del__` method for thread cleanup
    - Add context manager support
 
 2. **MEDIUM PRIORITY:** Generate complete coverage report
+
    - After test suite fix is complete
    - Validate ≥60% coverage achievement
    - Generate HTML coverage report
@@ -351,6 +371,7 @@ Phase 1 Foundation specification has been **validated against implementation** w
 **Accept current specification as-is** and proceed to Phase 2 implementation.
 
 **Rationale:**
+
 - All issues are LOW or MEDIUM severity
 - No blocking problems
 - Implementation already complete and functional
@@ -383,6 +404,7 @@ Phase 1 Foundation specification has been **validated against implementation** w
 **Phase 1 Foundation Specification Quality: A- (95%)**
 
 **Strengths:**
+
 - Comprehensive task breakdown (42 tasks)
 - Clear success criteria (all measurable)
 - Constitution-aligned (6/6 principles)
@@ -390,6 +412,7 @@ Phase 1 Foundation specification has been **validated against implementation** w
 - Exceptional execution (exceeded all targets)
 
 **Minor Improvements:**
+
 - 6 issues identified (0 critical, 0 high, 2 medium, 4 low)
 - All are documentation clarity enhancements
 - None block Phase 2 progression
@@ -398,6 +421,6 @@ Phase 1 Foundation specification has been **validated against implementation** w
 
 ---
 
-*Analysis completed: October 18, 2025*  
-*Analyzer: speckit.analyze (constitution-aware)*  
-*Status: Validation PASSED, Ready for Phase 2*
+_Analysis completed: October 18, 2025_  
+_Analyzer: speckit.analyze (constitution-aware)_  
+_Status: Validation PASSED, Ready for Phase 2_
