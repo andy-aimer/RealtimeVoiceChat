@@ -146,10 +146,33 @@ async def lifespan(app: FastAPI):
         pipeline_latency=app.state.SpeechPipelineManager.full_output_pipeline_latency / 1000, # seconds
     )
     app.state.Aborting = False # Keep this? Its usage isn't clear in the provided snippet. Minimizing changes.
+    
+    # Phase 2 P2: Enable thermal monitoring for LLM (T052)
+    # Get thermal thresholds from environment variables
+    thermal_trigger = float(os.getenv("THERMAL_TRIGGER_THRESHOLD", "85.0"))
+    thermal_resume = float(os.getenv("THERMAL_RESUME_THRESHOLD", "80.0"))
+    thermal_interval = float(os.getenv("THERMAL_CHECK_INTERVAL", "5.0"))
+    
+    if app.state.SpeechPipelineManager.llm.enable_thermal_monitoring(
+        trigger_threshold=thermal_trigger,
+        resume_threshold=thermal_resume,
+        check_interval=thermal_interval
+    ):
+        logger.info(
+            f"🖥️🌡️ Thermal monitoring enabled: "
+            f"trigger={thermal_trigger}°C, resume={thermal_resume}°C, interval={thermal_interval}s"
+        )
+    else:
+        logger.warning("🖥️🌡️ Thermal monitoring not available - continuing without hardware protection")
 
     yield
 
     logger.info("🖥️⏹️ Server shutting down")
+    
+    # Phase 2 P2: Disable thermal monitoring on shutdown
+    if hasattr(app.state.SpeechPipelineManager.llm, 'disable_thermal_monitoring'):
+        app.state.SpeechPipelineManager.llm.disable_thermal_monitoring()
+    
     app.state.AudioInputProcessor.shutdown()
 
 # --------------------------------------------------------------------
@@ -295,6 +318,19 @@ async def health_check():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "components": components
         }
+        
+        # Phase 2 P2: Include thermal state in health check (T053)
+        try:
+            thermal_state = app.state.SpeechPipelineManager.llm.get_thermal_state()
+            if thermal_state:
+                response_data["thermal"] = thermal_state
+                # Update overall status if thermal protection is active
+                if thermal_state.get("protection_active"):
+                    if overall_status == "healthy":
+                        overall_status = "degraded"
+                    response_data["status"] = overall_status
+        except Exception as thermal_err:
+            logger.debug(f"Could not get thermal state: {thermal_err}")
         
         # Determine HTTP status code
         status_code = 200

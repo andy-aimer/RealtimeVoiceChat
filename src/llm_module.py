@@ -10,6 +10,15 @@ import subprocess # <-- Restored usage
 from typing import Generator, List, Dict, Optional, Any
 from threading import Lock
 
+# Phase 2 P2: Thermal monitoring integration
+try:
+    from src.monitoring.thermal_monitor import ThermalMonitor
+    THERMAL_MONITOR_AVAILABLE = True
+except ImportError:
+    THERMAL_MONITOR_AVAILABLE = False
+    ThermalMonitor = None
+    logging.warning("🤖⚠️ ThermalMonitor not available. Thermal protection disabled.")
+
 # --- Library Dependencies ---
 try:
     import requests
@@ -239,6 +248,11 @@ class LLM:
         self._active_requests: Dict[str, Dict[str, Any]] = {}
         self._requests_lock = Lock()
         self._ollama_connection_ok: bool = False # Added explicit init
+        
+        # Phase 2 P2: Thermal protection (T048)
+        self._thermal_monitor: Optional[ThermalMonitor] = None
+        self._inference_paused: bool = False
+        self._thermal_lock = Lock()
 
         logger.info(f"🤖⚙️ Configuring LLM instance: backend='{self.backend}', model='{self.model}'")
 
@@ -631,6 +645,18 @@ class LLM:
             if self.backend == "ollama" and not self._ollama_connection_ok:
                  raise ConnectionError(f"LLM backend '{self.backend}' connection failed. Could not connect to {self.effective_ollama_url} even after attempting 'ollama ps'. Check server status and configuration.")
             raise RuntimeError(f"LLM backend '{self.backend}' client failed to initialize.")
+        
+        # Phase 2 P2: Check if inference is paused due to thermal protection (T049, T050)
+        with self._thermal_lock:
+            if self._inference_paused:
+                req_id = request_id if request_id else f"{self.backend}-{uuid.uuid4()}"
+                logger.warning(
+                    f"🤖🌡️⏸️ LLM inference BLOCKED (Request ID: {req_id}) - "
+                    f"Thermal protection active. Waiting for temperature to drop."
+                )
+                # Return empty generator to avoid errors while maintaining API contract
+                return
+                yield  # Make this a generator function
 
         req_id = request_id if request_id else f"{self.backend}-{uuid.uuid4()}"
         logger.info(f"🤖💬 Starting generation (Request ID: {req_id})")
@@ -1080,6 +1106,177 @@ class LLM:
 
         # Return the time taken for the actual tokens generated.
         return duration_ms
+
+    # ========================================
+    # Phase 2 P2: Thermal Protection Methods
+    # ========================================
+    
+    def enable_thermal_monitoring(
+        self,
+        trigger_threshold: float = 85.0,
+        resume_threshold: float = 80.0,
+        check_interval: float = 5.0
+    ) -> bool:
+        """
+        Enable thermal monitoring with automatic inference throttling.
+        
+        When enabled, the ThermalMonitor will track CPU temperature and automatically
+        pause LLM inference when temperature exceeds the trigger threshold, resuming
+        when it drops below the resume threshold.
+        
+        Args:
+            trigger_threshold: Temperature (°C) to trigger protection (default: 85°C)
+            resume_threshold: Temperature (°C) to resume normal operation (default: 80°C)
+            check_interval: Seconds between temperature checks (default: 5)
+        
+        Returns:
+            True if thermal monitoring was successfully enabled, False if unavailable
+        
+        Example:
+            >>> llm = LLM("ollama", "llama2")
+            >>> llm.enable_thermal_monitoring(trigger_threshold=85, resume_threshold=80)
+            >>> # Inference will now pause automatically if temperature exceeds 85°C
+        """
+        if not THERMAL_MONITOR_AVAILABLE:
+            logger.warning("🤖🌡️ ThermalMonitor not available - thermal protection disabled")
+            return False
+        
+        with self._thermal_lock:
+            if self._thermal_monitor is not None:
+                logger.warning("🤖🌡️ Thermal monitoring already enabled")
+                return True
+            
+            try:
+                self._thermal_monitor = ThermalMonitor(
+                    trigger_threshold=trigger_threshold,
+                    resume_threshold=resume_threshold,
+                    check_interval=check_interval
+                )
+                self._thermal_monitor.register_callback(self._on_thermal_event)
+                self._thermal_monitor.start_monitoring()
+                
+                logger.info(
+                    f"🤖🌡️✅ Thermal monitoring enabled: "
+                    f"trigger={trigger_threshold}°C, resume={resume_threshold}°C, interval={check_interval}s"
+                )
+                return True
+            
+            except Exception as e:
+                logger.error(f"🤖🌡️💥 Failed to enable thermal monitoring: {e}", exc_info=True)
+                self._thermal_monitor = None
+                return False
+    
+    def disable_thermal_monitoring(self) -> None:
+        """
+        Disable thermal monitoring and stop the background monitoring thread.
+        
+        This will stop temperature checks and allow inference to proceed normally
+        regardless of temperature.
+        """
+        with self._thermal_lock:
+            if self._thermal_monitor is None:
+                logger.debug("🤖🌡️ Thermal monitoring already disabled")
+                return
+            
+            try:
+                self._thermal_monitor.stop_monitoring()
+                self._thermal_monitor = None
+                self._inference_paused = False
+                logger.info("🤖🌡️ Thermal monitoring disabled")
+            
+            except Exception as e:
+                logger.error(f"🤖🌡️💥 Error disabling thermal monitoring: {e}", exc_info=True)
+    
+    def _on_thermal_event(self, protection_active: bool, temperature: float) -> None:
+        """
+        Callback invoked by ThermalMonitor when thermal protection state changes.
+        
+        This method is called automatically by the thermal monitoring thread when:
+        - Temperature exceeds trigger threshold → pause inference
+        - Temperature drops below resume threshold → resume inference
+        
+        Args:
+            protection_active: True if thermal protection triggered, False if resuming
+            temperature: Current CPU temperature in Celsius
+        """
+        with self._thermal_lock:
+            if protection_active:
+                self.pause_inference()
+                logger.critical(
+                    f"🤖🌡️🔥 THERMAL PROTECTION ACTIVATED at {temperature:.1f}°C - "
+                    f"LLM inference PAUSED to protect hardware"
+                )
+            else:
+                self.resume_inference()
+                logger.info(
+                    f"🤖🌡️✅ THERMAL PROTECTION RESUMED at {temperature:.1f}°C - "
+                    f"LLM inference ACTIVE"
+                )
+    
+    def pause_inference(self) -> None:
+        """
+        Pause LLM inference due to thermal protection.
+        
+        When paused, the generate() method will log warnings and return immediately
+        without performing inference. This prevents CPU-intensive operations during
+        thermal events.
+        
+        This is typically called automatically by thermal monitoring, but can be
+        called manually for testing or emergency shutdown scenarios.
+        """
+        with self._thermal_lock:
+            if self._inference_paused:
+                return  # Already paused
+            
+            self._inference_paused = True
+            logger.warning("🤖⏸️ LLM inference PAUSED (thermal protection or manual override)")
+    
+    def resume_inference(self) -> None:
+        """
+        Resume LLM inference after thermal protection.
+        
+        Re-enables inference after temperature has cooled below the resume threshold.
+        This is typically called automatically by thermal monitoring.
+        """
+        with self._thermal_lock:
+            if not self._inference_paused:
+                return  # Already active
+            
+            self._inference_paused = False
+            logger.info("🤖▶️ LLM inference RESUMED (thermal protection cleared)")
+    
+    def is_inference_paused(self) -> bool:
+        """
+        Check if LLM inference is currently paused due to thermal protection.
+        
+        Returns:
+            True if inference is paused, False if active
+        """
+        with self._thermal_lock:
+            return self._inference_paused
+    
+    def get_thermal_state(self) -> Optional[Dict[str, Any]]:
+        """
+        Get current thermal monitoring state.
+        
+        Returns:
+            Dictionary with thermal state information, or None if monitoring disabled.
+            Contains: temperature, protection_active, last_trigger_time, last_resume_time
+        """
+        with self._thermal_lock:
+            if self._thermal_monitor is None:
+                return None
+            
+            state = self._thermal_monitor.get_state()
+            return {
+                "temperature": state.current_temp,
+                "protection_active": state.protection_active,
+                "inference_paused": self._inference_paused,
+                "last_trigger_time": state.last_trigger_time.isoformat() if state.last_trigger_time else None,
+                "last_resume_time": state.last_resume_time.isoformat() if state.last_resume_time else None,
+                "trigger_threshold": state.trigger_threshold,
+                "resume_threshold": state.resume_threshold,
+            }
 
 
 # --- Context Manager ---
