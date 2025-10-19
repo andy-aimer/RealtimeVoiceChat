@@ -8,4 +8,6 @@ Modules:
     thermal_monitor: CPU temperature monitoring and thermal protection logic
 """
 
-__all__ = []
+from src.monitoring.thermal_monitor import ThermalMonitor, ThermalState
+
+__all__ = ["ThermalMonitor", "ThermalState"]
