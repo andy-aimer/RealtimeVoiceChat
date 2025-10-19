@@ -6,7 +6,7 @@ injection detection.
 """
 
 import pytest
-from code.security.validators import (
+from src.security.validators import (
     ValidationError,
     WebSocketMessage,
     TextData,
@@ -474,5 +474,5 @@ class TestErrorSanitization:
         """Test that sanitize_error_message can be imported from server."""
         # This will be tested when we run integration tests
         # For now, just verify the validators module is complete
-        from code.security.validators import validate_message
+        from src.security.validators import validate_message
         assert validate_message is not None

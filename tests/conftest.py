@@ -89,3 +89,44 @@ def test_client():
     """
     # Placeholder - will import from server.py once endpoints are added
     return None
+
+
+# Phase 2 P1: TurnDetection fixture with automatic cleanup
+@pytest.fixture
+def turn_detector_factory():
+    """
+    Factory fixture for creating TurnDetection instances with automatic cleanup.
+    
+    Ensures all TurnDetection instances are properly cleaned up after tests,
+    preventing thread leaks.
+    
+    Usage:
+        def test_something(turn_detector_factory):
+            def callback(time_val, text):
+                pass
+            
+            detector = turn_detector_factory(on_new_waiting_time=callback)
+            # Use detector...
+            # No need to manually close, fixture handles cleanup
+    
+    Phase 2 Addition: Part of User Story 1 (P1) thread cleanup.
+    """
+    detectors = []
+    
+    def _create_detector(**kwargs):
+        """Create a TurnDetection instance and register for cleanup."""
+        from src.turndetect import TurnDetection
+        detector = TurnDetection(**kwargs)
+        detectors.append(detector)
+        return detector
+    
+    yield _create_detector
+    
+    # Cleanup all created detectors
+    for detector in detectors:
+        try:
+            if hasattr(detector, 'text_worker') and detector.text_worker.is_alive():
+                detector.close()
+        except Exception as e:
+            print(f"Warning: Failed to cleanup detector: {e}")
+

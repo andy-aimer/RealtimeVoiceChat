@@ -9,6 +9,9 @@ import torch
 import time
 import re
 
+# Phase 2: Import ManagedThread for graceful thread cleanup
+from src.utils.lifecycle import ManagedThread
+
 # Configuration constants
 model_dir_local = "KoljaB/SentenceFinishedClassification"
 model_dir_cloud = "/root/models/sentenceclassification/"
@@ -207,9 +210,11 @@ class TurnDetection:
         self.texts_without_punctuation: collections.deque[tuple[str, str]] = collections.deque(maxlen=20)
 
         self.text_queue: queue.Queue[str] = queue.Queue() # Queue for incoming text
-        self.text_worker = threading.Thread(
+        
+        # Phase 2: Use ManagedThread instead of raw threading.Thread for graceful cleanup
+        self.text_worker = ManagedThread(
             target=self._text_worker,
-            daemon=True # Allows program to exit even if this thread is running
+            name="TurnDetection-TextWorker"
         )
         self.text_worker.start()
 
@@ -401,7 +406,8 @@ class TurnDetection:
             return self.unknown_sentence_detection_pause
 
     def _text_worker(
-        self
+        self,
+        managed_thread: ManagedThread
     ) -> None:
         """
         Background worker thread that processes text from the queue for turn detection.
@@ -418,9 +424,13 @@ class TurnDetection:
         9. Applies a speed factor and adjustments (e.g., for ellipses).
         10. Ensures the final pause meets minimum pipeline latency requirements.
         11. Calls `suggest_time` with the final calculated pause duration.
-        Handles queue timeouts gracefully to allow for potential shutdown.
+        
+        Phase 2: Now accepts managed_thread parameter to check should_stop() for graceful shutdown.
+        
+        Args:
+            managed_thread: The ManagedThread instance managing this worker.
         """
-        while True:
+        while not managed_thread.should_stop():
             try:
                 # Wait for text from the queue, with a timeout to avoid blocking forever
                 text = self.text_queue.get(block=True, timeout=0.1)
@@ -540,3 +550,49 @@ class TurnDetection:
         #         self.text_queue.task_done()
         #     except queue.Empty:
         #         break
+    
+    def close(self) -> None:
+        """
+        Gracefully shut down the TurnDetection instance.
+        
+        Stops the background worker thread and waits for it to complete.
+        Should be called when the TurnDetection instance is no longer needed.
+        
+        Phase 2: Added for proper thread cleanup.
+        """
+        logger.info("🎤🚪 Closing TurnDetection instance")
+        if hasattr(self, 'text_worker') and self.text_worker.is_alive():
+            self.text_worker.stop()
+            joined = self.text_worker.join(timeout=5.0)
+            if joined:
+                logger.info("🎤✅ TurnDetection background worker stopped successfully")
+            else:
+                logger.warning("🎤⚠️  TurnDetection background worker did not stop within timeout")
+        else:
+            logger.debug("🎤 TurnDetection background worker already stopped")
+    
+    def __enter__(self) -> 'TurnDetection':
+        """
+        Enter the context manager.
+        
+        Phase 2: Enables using TurnDetection with 'with' statement for automatic cleanup.
+        
+        Returns:
+            self for use in 'with' statements.
+        """
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """
+        Exit the context manager.
+        
+        Automatically closes the TurnDetection instance, stopping the background thread.
+        
+        Phase 2: Added for automatic cleanup in context manager.
+        
+        Args:
+            exc_type: Exception type if an exception occurred.
+            exc_val: Exception value if an exception occurred.
+            exc_tb: Exception traceback if an exception occurred.
+        """
+        self.close()
