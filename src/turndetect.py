@@ -10,7 +10,7 @@ import time
 import re
 
 # Phase 2: Import ManagedThread for graceful thread cleanup
-from code.utils.lifecycle import ManagedThread
+from src.utils.lifecycle import ManagedThread
 
 # Configuration constants
 model_dir_local = "KoljaB/SentenceFinishedClassification"

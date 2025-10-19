@@ -115,7 +115,7 @@ def turn_detector_factory():
     
     def _create_detector(**kwargs):
         """Create a TurnDetection instance and register for cleanup."""
-        from code.turndetect import TurnDetection
+        from src.turndetect import TurnDetection
         detector = TurnDetection(**kwargs)
         detectors.append(detector)
         return detector
