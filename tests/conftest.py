@@ -2,24 +2,17 @@
 Pytest configuration and shared fixtures for Phase 1 Foundation tests.
 
 Provides fixtures for:
-- Async test support
+- Async test support (via pytest-asyncio)
 - HTTP client for API testing
 - Mock data for testing
 - FastAPI test client setup
 """
 import pytest
-import asyncio
-from typing import AsyncGenerator, Generator
-from fastapi.testclient import TestClient
+from typing import AsyncGenerator
 from httpx import AsyncClient
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# Event loop is now managed by pytest-asyncio with asyncio_mode = "auto"
 
 
 @pytest.fixture

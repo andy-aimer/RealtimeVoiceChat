@@ -53,6 +53,8 @@ max-line-length = 120
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "slow: marks tests as slow",
     "integration: marks tests as integration tests",
