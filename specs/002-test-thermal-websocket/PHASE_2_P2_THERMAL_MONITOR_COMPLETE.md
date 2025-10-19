@@ -13,6 +13,7 @@ Successfully implemented the thermal monitoring system for Raspberry Pi 5 hardwa
 ### What's Complete ✅
 
 **Implementation** (437 lines):
+
 - ✅ `ThermalState` dataclass with hysteresis logic (85°C trigger, 80°C resume)
 - ✅ `ThermalMonitor` class with temperature reading from `/sys/class/thermal`
 - ✅ Platform detection (graceful degradation on non-Pi systems)
@@ -23,11 +24,13 @@ Successfully implemented the thermal monitoring system for Raspberry Pi 5 hardwa
 - ✅ Comprehensive error handling and logging
 
 **Testing** (32 tests, 100% pass rate):
+
 - ✅ `TestThermalState`: 8 tests for hysteresis logic
 - ✅ `TestThermalMonitor`: 20 tests for monitoring functionality
 - ✅ `TestThermalProtectionScenarios`: 3 integration-style tests
 
 **Test Coverage**:
+
 - Temperature reading (success, error, invalid data)
 - Platform detection (Pi vs non-Pi)
 - Hysteresis logic (trigger, resume, gap prevention)
@@ -56,6 +59,7 @@ tests/unit/
 ### Key Features
 
 **1. ThermalState Dataclass**
+
 ```python
 @dataclass
 class ThermalState:
@@ -65,13 +69,14 @@ class ThermalState:
     last_resume_time: Optional[datetime] = None
     trigger_threshold: float = 85.0
     resume_threshold: float = 80.0
-    
+
     def should_trigger_protection(self) -> bool: ...
     def should_resume_normal(self) -> bool: ...
     def update_temperature(self, temp: float) -> None: ...
 ```
 
 **2. ThermalMonitor Class**
+
 ```python
 class ThermalMonitor:
     def __init__(self, trigger_threshold=85.0, resume_threshold=80.0, check_interval=5.0): ...
@@ -86,23 +91,27 @@ class ThermalMonitor:
 ```
 
 **3. Hysteresis Logic**
+
 - Protection triggers at **85°C**
 - Protection resumes at **80°C**
 - **5°C gap** prevents rapid oscillation
 - State changes only when crossing thresholds in appropriate direction
 
 **4. Background Monitoring**
+
 - Uses `ManagedThread` for graceful lifecycle
 - Configurable check interval (default: 5 seconds)
 - Sleeps in 0.5s intervals for quick shutdown
 - Handles exceptions without crashing
 
 **5. Platform Detection**
+
 - Checks for `/sys/class/thermal/thermal_zone0/temp`
 - Returns `-1.0` on non-Pi systems
 - Graceful degradation (no crashes)
 
 **6. Simulation Mode**
+
 - `_simulate_temperature(temp)` for testing
 - No hardware required
 - Full functionality testable
@@ -189,7 +198,9 @@ monitor.stop_monitoring()
 ## What's Next
 
 ### Immediate (In Progress)
+
 **Tasks T048-T053**: Integration into Application
+
 - [ ] T048: Integrate `ThermalMonitor` into `LLMModule` in `src/llm_module.py`
 - [ ] T049: Implement `_on_thermal_event` callback in `LLMModule`
 - [ ] T050: Add `pause_inference()` method to `LLMModule`
@@ -198,13 +209,17 @@ monitor.stop_monitoring()
 - [ ] T053: Update health check endpoint to include thermal state
 
 ### Integration Testing
+
 **Tasks T060-T062**: Integration Tests
+
 - [ ] T060: Create `tests/integration/test_thermal_integration.py`
 - [ ] T061: Add integration test for LLM throttling on thermal trigger
 - [ ] T062: Add integration test for thermal resume workflow
 
 ### Hardware Validation
+
 **Tasks T063-T065**: Pi 5 Testing
+
 - [ ] T063: Test thermal monitoring on Raspberry Pi 5 hardware
 - [ ] T064: Test thermal stress with `stress-ng` on Pi 5
 - [ ] T065: Add environment variable configuration support in README
@@ -213,13 +228,13 @@ monitor.stop_monitoring()
 
 ## Success Criteria Status
 
-| ID | Criterion | Status | Evidence |
-|----|-----------|--------|----------|
-| SC-006 | Protection triggers within 10s of 85°C | ✅ | Test passes (check_interval=5s) |
-| SC-007 | Temperature capped at 87°C | ⏳ | Pending LLM integration |
-| SC-008 | Resumes within 30s of <80°C | ✅ | Hysteresis logic validated |
-| SC-009 | Zero thermal crashes | ✅ | Exception handling tested |
-| SC-010 | Clear notification logs | ✅ | Logging implemented |
+| ID     | Criterion                              | Status | Evidence                        |
+| ------ | -------------------------------------- | ------ | ------------------------------- |
+| SC-006 | Protection triggers within 10s of 85°C | ✅     | Test passes (check_interval=5s) |
+| SC-007 | Temperature capped at 87°C             | ⏳     | Pending LLM integration         |
+| SC-008 | Resumes within 30s of <80°C            | ✅     | Hysteresis logic validated      |
+| SC-009 | Zero thermal crashes                   | ✅     | Exception handling tested       |
+| SC-010 | Clear notification logs                | ✅     | Logging implemented             |
 
 ---
 
@@ -237,10 +252,12 @@ monitor.stop_monitoring()
 ## Files Modified
 
 ### Created
+
 - `src/monitoring/thermal_monitor.py` (437 lines)
 - `tests/unit/test_thermal_monitor.py` (589 lines)
 
 ### Updated
+
 - `src/monitoring/__init__.py` (added exports)
 
 ---
@@ -262,11 +279,13 @@ monitor.stop_monitoring()
 ## Next Session Plan
 
 1. **Integrate into LLMModule** (T048-T053)
+
    - Add thermal monitor instance
    - Implement pause/resume methods
    - Connect to server lifecycle
 
 2. **Integration Tests** (T060-T062)
+
    - Test full workflow with LLM throttling
    - Validate thermal events trigger correct behavior
 
