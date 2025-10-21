@@ -60,6 +60,7 @@ As a **user of the voice chat system**, I want WebSocket connections to handle d
 - What happens when thread cleanup is triggered during active audio processing?
 - How does system handle rapid temperature fluctuations around the 85°C threshold (oscillation)?
 - What happens when WebSocket reconnection fails after maximum retry attempts?
+  - **Resolution**: Display permanent error message requiring user action (page refresh/restart) after 10 failed attempts
 - How does system handle thread cleanup during pytest teardown when threads are blocked on I/O?
 - What happens when CPU temperature monitoring becomes unavailable mid-session?
 - How does system behave when multiple WebSocket disconnections occur simultaneously?
@@ -81,7 +82,9 @@ As a **user of the voice chat system**, I want WebSocket connections to handle d
 - **FR-006**: System MUST monitor CPU temperature continuously on Raspberry Pi 5 platforms
 - **FR-007**: System MUST trigger workload reduction when CPU temperature reaches 85°C threshold
 - **FR-008**: Workload reduction actions MUST include one or more of: reducing LLM inference rate, pausing TTS synthesis, or queuing responses
-- **FR-009**: System MUST log CRITICAL alert when thermal protection is triggered, including timestamp and current temperature
+- **FR-009**: System MUST log CRITICAL alert when thermal protection is triggered, including timestamp and current temperature in structured JSON format
+- **FR-009a**: System MUST display visual UI indicator (warning banner or status message) when thermal protection is active
+- **FR-009b**: All thermal and WebSocket lifecycle events MUST be logged using structured JSON format with standardized fields (timestamp, level, event_type, context)
 - **FR-010**: System MUST automatically resume normal operation when CPU temperature drops below 80°C (hysteresis to prevent oscillation)
 - **FR-011**: System MUST gracefully handle platforms where CPU temperature monitoring is unavailable (return -1, no errors)
 - **FR-012**: Thermal thresholds MUST be configurable via environment variables or configuration file
@@ -91,7 +94,8 @@ As a **user of the voice chat system**, I want WebSocket connections to handle d
 - **FR-013**: Client MUST detect WebSocket disconnection within 5 seconds of connection loss
 - **FR-014**: Client MUST automatically attempt reconnection using exponential backoff strategy (initial: 1s, max: 30s)
 - **FR-015**: System MUST implement maximum retry limit of 10 attempts before requiring manual reconnection
-- **FR-016**: System MUST persist session state during temporary disconnections (session ID, conversation context)
+- **FR-015a**: After 10 failed reconnection attempts, system MUST display permanent error message to user requiring manual action (page refresh or restart)
+- **FR-016**: System MUST persist session state during temporary disconnections (session ID, conversation context from last 5 minutes)
 - **FR-017**: Server MUST maintain session data for 5 minutes after disconnection to allow reconnection
 - **FR-018**: System MUST provide clear user feedback during disconnection, reconnection, and connection failure states
 - **FR-019**: System MUST implement connection health checks (ping/pong) every 30 seconds to detect stale connections
@@ -109,7 +113,8 @@ As a **user of the voice chat system**, I want WebSocket connections to handle d
   - Relationships: Reads from Pi5Monitor, controls LLMModule and AudioProcessor
 
 - **WebSocketSession**: Manages client connection lifecycle
-  - Attributes: session_id, connection_state, reconnection_attempts, last_active_timestamp
+  - Attributes: session_id, connection_state (CONNECTED | DISCONNECTED), reconnection_attempts, last_active_timestamp, conversation_context (last 5 minutes, timestamp-indexed)
+  - State transitions: CONNECTED ↔ DISCONNECTED (binary state machine for simplicity)
   - Relationships: Associated with conversation context, manages connection to server
 
 ## Success Criteria _(mandatory)_
@@ -130,7 +135,7 @@ As a **user of the voice chat system**, I want WebSocket connections to handle d
 - **SC-007**: System prevents CPU temperature from exceeding 87°C during sustained workload (2°C margin of safety)
 - **SC-008**: System resumes normal operation within 30 seconds of temperature dropping below 80°C threshold
 - **SC-009**: Zero thermal-related system crashes or hardware damage occur during stress testing
-- **SC-010**: Users receive clear notification when thermal protection is active (log message visible in console/UI)
+- **SC-010**: Users receive clear notification when thermal protection is active (CRITICAL log message visible in console AND visual indicator displayed in web UI)
 
 #### WebSocket Reliability Success (P3)
 
@@ -160,6 +165,7 @@ As a **user of the voice chat system**, I want WebSocket connections to handle d
 - pytest-xdist (optional) for test isolation and parallel execution
 - WebSocket protocol standards (RFC 6455)
 - Raspberry Pi 5 thermal monitoring interfaces (`/sys/class/thermal/`, `vcgencmd`)
+- Structured logging library (Python `logging` module with JSON formatter or `python-json-logger`)
 
 ### External Dependencies
 
@@ -200,6 +206,16 @@ As a **user of the voice chat system**, I want WebSocket connections to handle d
 | Cannot reproduce thread hanging in test environment            | High   | Low        | Document exact reproduction steps from Phase 1; use thread dumps and profiling to identify blocking calls         |
 | Raspberry Pi 5 thermal testing unavailable                     | Medium | Medium     | Use thermal simulation or CPU stress testing; validate on actual hardware before release                          |
 | WebSocket reconnection conflicts with existing error handling  | Medium | Medium     | Review Phase 1 error handling code; ensure new logic integrates cleanly; add integration tests                    |
+
+## Clarifications
+
+### Session 2025-10-20
+
+- Q: What connection states should the WebSocket session lifecycle support? → A: Binary state (2 states): CONNECTED, DISCONNECTED
+- Q: How should users be notified when thermal protection is active? → A: Console logs + UI indicator
+- Q: How much conversation context should be preserved during WebSocket reconnection? → A: Last 5 minutes
+- Q: What should happen after 10 failed WebSocket reconnection attempts? → A: Display permanent error message
+- Q: What logging format should be used for thermal protection and WebSocket events? → A: Structured JSON logs
 
 ## Open Questions
 

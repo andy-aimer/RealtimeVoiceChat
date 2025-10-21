@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  realtimevoicechat:
+    build:
+      context: ../..
+      dockerfile: deployment/pi5/Dockerfile.pi5
+    container_name: realtimevoicechat_pi5
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    volumes:
+      - ./ssl:/app/ssl:ro
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - PROD_ENVIRONMENT=pi5
+      - PROD_HOST=0.0.0.0
+      - PROD_PORT=8000
+      - PROD_SSL_PORT=8443
+      - PROD_MAX_WORKERS=2
+      - PROD_MAX_CONNECTIONS=50
+      - PROD_LOG_LEVEL=INFO
+    deploy:
+      resources:
+        limits:
+          memory: 1GB
+        reservations:
+          memory: 512MB
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_pi5
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - realtimevoicechat
+    deploy:
+      resources:
+        limits:
+          memory: 128MB
+        reservations:
+          memory: 64MB
+
+  monitoring:
+    build:
+      context: ../..
+      dockerfile: deployment/pi5/Dockerfile.pi5
+    container_name: monitoring_pi5
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./logs:/app/logs:ro
+      - ./data:/app/data:ro
+    environment:
+      - MONITORING_PORT=8001
+      - MONITORING_HOST=0.0.0.0
+    command: ["python", "monitoring/test_monitor.py"]
+    deploy:
+      resources:
+        limits:
+          memory: 256MB
+        reservations:
+          memory: 128MB
+
+volumes:
+  ssl_data:
+  logs_data:
+  app_data:
+
+networks:
+  default:
+    driver: bridge

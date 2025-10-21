@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Monitor Dashboard - Phase 2 P4</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.8;
+        }
+        
+        .connection-status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        
+        .connected {
+            background: rgba(46, 204, 113, 0.2);
+            border: 1px solid #2ecc71;
+        }
+        
+        .disconnected {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid #e74c3c;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .card h3 {
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .progress-section {
+            grid-column: 1 / -1;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 25px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 10px 0;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #2ecc71, #27ae60);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat-box {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .test-log {
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        
+        .log-passed {
+            background: rgba(46, 204, 113, 0.2);
+            border-left: 3px solid #2ecc71;
+        }
+        
+        .log-failed {
+            background: rgba(231, 76, 60, 0.2);
+            border-left: 3px solid #e74c3c;
+        }
+        
+        .log-running {
+            background: rgba(52, 152, 219, 0.2);
+            border-left: 3px solid #3498db;
+        }
+        
+        .current-test {
+            background: rgba(241, 196, 15, 0.2);
+            border: 1px solid #f1c40f;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .metric-chart {
+            height: 60px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .dot-green { background: #2ecc71; }
+        .dot-red { background: #e74c3c; }
+        .dot-yellow { background: #f1c40f; }
+        .dot-blue { background: #3498db; }
+        
+        .controls {
+            grid-column: 1 / -1;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>🖥️ Test Monitor Dashboard</h1>
+            <div class="subtitle">Phase 2 P4 - Polish & Validation | Real-Time Test Execution Monitoring</div>
+        </div>
+        
+        <div id="connectionStatus" class="connection-status disconnected">
+            <span class="status-dot dot-red"></span>
+            Connecting to monitor...
+        </div>
+        
+        <div class="grid">
+            <div class="card progress-section">
+                <h3>🧪 Test Execution Progress</h3>
+                
+                <div class="current-test" id="currentTest">
+                    <strong>Current Test:</strong> <span id="currentTestName">Waiting to start...</span>
+                </div>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%">
+                        <span id="progressText">0 / 0 tests</span>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value" id="totalTests">0</div>
+                        <div class="stat-label">Total Tests</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="passedTests" style="color: #2ecc71;">0</div>
+                        <div class="stat-label">Passed</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="failedTests" style="color: #e74c3c;">0</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="duration">0s</div>
+                        <div class="stat-label">Duration</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="coverage">0%</div>
+                        <div class="stat-label">Coverage</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>📊 System Metrics</h3>
+                <div class="metrics-grid">
+                    <div class="metric-chart">
+                        <div>
+                            <div style="font-size: 0.9em; opacity: 0.8;">CPU Usage</div>
+                            <div style="font-size: 1.4em; font-weight: bold;" id="cpuUsage">0%</div>
+                        </div>
+                        <div class="status-dot dot-green" id="cpuStatus"></div>
+                    </div>
+                    <div class="metric-chart">
+                        <div>
+                            <div style="font-size: 0.9em; opacity: 0.8;">Memory</div>
+                            <div style="font-size: 1.4em; font-weight: bold;" id="memoryUsage">0 MB</div>
+                        </div>
+                        <div class="status-dot dot-green" id="memoryStatus"></div>
+                    </div>
+                    <div class="metric-chart">
+                        <div>
+                            <div style="font-size: 0.9em; opacity: 0.8;">Process Memory</div>
+                            <div style="font-size: 1.4em; font-weight: bold;" id="processMemory">0 MB</div>
+                        </div>
+                        <div class="status-dot dot-green" id="processStatus"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>📝 Recent Test Results</h3>
+                <div class="test-log" id="testLog">
+                    <div class="log-entry">Waiting for test execution to begin...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" onclick="startTestRun()" id="startBtn">▶️ Start Test Run</button>
+            <button class="btn" onclick="clearLog()">🗑️ Clear Log</button>
+            <button class="btn" onclick="exportResults()" id="exportBtn" disabled>📊 Export Results</button>
+        </div>
+    </div>
+
+    <script>
+        class TestDashboard {
+            constructor() {
+                this.ws = null;
+                this.isConnected = false;
+                this.testResults = {};
+                this.systemMetrics = {};
+                this.reconnectInterval = null;
+                
+                this.connect();
+            }
+            
+            connect() {
+                try {
+                    this.ws = new WebSocket('ws://localhost:8001/ws');
+                    
+                    this.ws.onopen = () => {
+                        console.log('Connected to test monitor');
+                        this.isConnected = true;
+                        this.updateConnectionStatus(true);
+                        
+                        if (this.reconnectInterval) {
+                            clearInterval(this.reconnectInterval);
+                            this.reconnectInterval = null;
+                        }
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        this.handleUpdate(data);
+                    };
+                    
+                    this.ws.onclose = () => {
+                        console.log('Disconnected from test monitor');
+                        this.isConnected = false;
+                        this.updateConnectionStatus(false);
+                        this.scheduleReconnect();
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                    };
+                    
+                } catch (error) {
+                    console.error('Failed to connect:', error);
+                    this.scheduleReconnect();
+                }
+            }
+            
+            scheduleReconnect() {
+                if (!this.reconnectInterval) {
+                    this.reconnectInterval = setInterval(() => {
+                        if (!this.isConnected) {
+                            console.log('Attempting to reconnect...');
+                            this.connect();
+                        }
+                    }, 3000);
+                }
+            }
+            
+            updateConnectionStatus(connected) {
+                const statusEl = document.getElementById('connectionStatus');
+                const dot = statusEl.querySelector('.status-dot');
+                
+                if (connected) {
+                    statusEl.className = 'connection-status connected';
+                    statusEl.innerHTML = '<span class="status-dot dot-green"></span>Connected - Live monitoring active';
+                } else {
+                    statusEl.className = 'connection-status disconnected';
+                    statusEl.innerHTML = '<span class="status-dot dot-red"></span>Disconnected - Attempting to reconnect...';
+                }
+            }
+            
+            handleUpdate(data) {
+                if (data.type === 'test_update') {
+                    this.testResults = data.test_results;
+                    this.systemMetrics = data.system_metrics;
+                    this.updateDisplay();
+                }
+            }
+            
+            updateDisplay() {
+                this.updateTestProgress();
+                this.updateSystemMetrics();
+                this.updateTestLog();
+            }
+            
+            updateTestProgress() {
+                const results = this.testResults;
+                
+                // Update current test
+                document.getElementById('currentTestName').textContent = 
+                    results.current_test || 'Waiting...';
+                
+                // Update progress bar
+                const completed = (results.passed || 0) + (results.failed || 0) + (results.skipped || 0);
+                const total = results.total_tests || 1;
+                const percentage = Math.round((completed / total) * 100);
+                
+                const progressFill = document.getElementById('progressFill');
+                progressFill.style.width = `${percentage}%`;
+                document.getElementById('progressText').textContent = `${completed} / ${total} tests`;
+                
+                // Update statistics
+                document.getElementById('totalTests').textContent = total;
+                document.getElementById('passedTests').textContent = results.passed || 0;
+                document.getElementById('failedTests').textContent = results.failed || 0;
+                document.getElementById('coverage').textContent = `${(results.coverage || 0).toFixed(1)}%`;
+                
+                // Update duration
+                if (results.start_time) {
+                    const start = new Date(results.start_time);
+                    const end = results.end_time ? new Date(results.end_time) : new Date();
+                    const duration = Math.round((end - start) / 1000);
+                    document.getElementById('duration').textContent = `${duration}s`;
+                }
+                
+                // Add pulse effect if tests are running
+                const currentTestEl = document.getElementById('currentTest');
+                if (results.current_test && results.current_test !== 'Test run complete') {
+                    currentTestEl.classList.add('pulse');
+                } else {
+                    currentTestEl.classList.remove('pulse');
+                }
+            }
+            
+            updateSystemMetrics() {
+                const metrics = this.systemMetrics;
+                
+                // Update CPU
+                const cpuPercent = metrics.cpu_percent || 0;
+                document.getElementById('cpuUsage').textContent = `${cpuPercent.toFixed(1)}%`;
+                document.getElementById('cpuStatus').className = 
+                    `status-dot ${cpuPercent > 80 ? 'dot-red' : cpuPercent > 50 ? 'dot-yellow' : 'dot-green'}`;
+                
+                // Update Memory
+                document.getElementById('memoryUsage').textContent = `${metrics.memory_mb || 0} MB`;
+                const memPercent = metrics.memory_percent || 0;
+                document.getElementById('memoryStatus').className = 
+                    `status-dot ${memPercent > 80 ? 'dot-red' : memPercent > 60 ? 'dot-yellow' : 'dot-green'}`;
+                
+                // Update Process Memory
+                document.getElementById('processMemory').textContent = `${metrics.process_memory_mb || 0} MB`;
+                document.getElementById('processStatus').className = 'status-dot dot-blue';
+            }
+            
+            updateTestLog() {
+                const logContainer = document.getElementById('testLog');
+                const testDetails = this.testResults.test_details || [];
+                
+                if (testDetails.length === 0) return;
+                
+                // Show last 10 test results
+                const recentTests = testDetails.slice(-10);
+                
+                logContainer.innerHTML = recentTests.map(test => {
+                    const statusClass = test.status === 'PASSED' ? 'log-passed' : 
+                                      test.status === 'FAILED' ? 'log-failed' : 'log-running';
+                    const icon = test.status === 'PASSED' ? '✅' : 
+                               test.status === 'FAILED' ? '❌' : '🔄';
+                    
+                    return `
+                        <div class="log-entry ${statusClass}">
+                            ${icon} ${test.name} - ${test.status}
+                            ${test.duration ? ` (${test.duration.toFixed(2)}s)` : ''}
+                        </div>
+                    `;
+                }).join('');
+                
+                // Auto-scroll to bottom
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+        
+        // Dashboard functions
+        function startTestRun() {
+            fetch('/api/start-tests', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Test run started:', data);
+                    document.getElementById('startBtn').disabled = true;
+                })
+                .catch(error => console.error('Failed to start tests:', error));
+        }
+        
+        function clearLog() {
+            document.getElementById('testLog').innerHTML = 
+                '<div class="log-entry">Log cleared</div>';
+        }
+        
+        function exportResults() {
+            // TODO: Implement results export
+            alert('Export functionality coming soon!');
+        }
+        
+        // Initialize dashboard
+        const dashboard = new TestDashboard();
+        
+        console.log('Test Monitor Dashboard loaded');
+    </script>
+</body>
+</html>

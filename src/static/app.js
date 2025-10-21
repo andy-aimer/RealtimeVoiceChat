@@ -13,12 +13,252 @@
   };
 })();
 
+// =============================================================================
+// Phase 2 P3: WebSocket Client with Reconnection (T087-T092)
+// =============================================================================
+
+/**
+ * Exponential backoff calculator for retry operations.
+ * Mirrors server-side ExponentialBackoff utility.
+ */
+class ExponentialBackoff {
+  constructor(initialDelay = 1000, maxDelay = 30000, maxAttempts = 10) {
+    this.initialDelay = initialDelay;  // milliseconds
+    this.maxDelay = maxDelay;
+    this.maxAttempts = maxAttempts;
+    this.attempt = 0;
+  }
+
+  nextDelay() {
+    const delay = Math.min(
+      this.initialDelay * Math.pow(2, this.attempt),
+      this.maxDelay
+    );
+    this.attempt++;
+    return delay;
+  }
+
+  shouldGiveUp() {
+    return this.attempt >= this.maxAttempts;
+  }
+
+  reset() {
+    this.attempt = 0;
+  }
+
+  getAttempt() {
+    return this.attempt;
+  }
+}
+
+/**
+ * WebSocket client with automatic reconnection support.
+ * Manages session persistence via localStorage and exponential backoff.
+ */
+class WebSocketClient {
+  constructor(url, options = {}) {
+    this.baseUrl = url;
+    this.socket = null;
+    this.sessionId = null;
+    this.backoff = new ExponentialBackoff(1000, 30000, 10);
+    this.reconnectTimer = null;
+    this.intentionallyClosed = false;
+    this.isReconnecting = false;
+    
+    // Callbacks
+    this.onopen = options.onopen || (() => {});
+    this.onmessage = options.onmessage || (() => {});
+    this.onclose = options.onclose || (() => {});
+    this.onerror = options.onerror || (() => {});
+    this.onreconnecting = options.onreconnecting || (() => {});
+    this.onreconnected = options.onreconnected || (() => {});
+    this.onreconnectfailed = options.onreconnectfailed || (() => {});
+    
+    // Load session ID from localStorage
+    this.loadSessionId();
+  }
+
+  loadSessionId() {
+    try {
+      this.sessionId = localStorage.getItem('voicechat_session_id');
+      if (this.sessionId) {
+        console.log(`📦 Loaded session ID from storage: ${this.sessionId.substring(0, 8)}...`);
+      }
+    } catch (e) {
+      console.warn('Failed to load session ID from localStorage:', e);
+    }
+  }
+
+  saveSessionId(sessionId) {
+    this.sessionId = sessionId;
+    try {
+      localStorage.setItem('voicechat_session_id', sessionId);
+      console.log(`💾 Saved session ID to storage: ${sessionId.substring(0, 8)}...`);
+    } catch (e) {
+      console.warn('Failed to save session ID to localStorage:', e);
+    }
+  }
+
+  clearSessionId() {
+    this.sessionId = null;
+    try {
+      localStorage.removeItem('voicechat_session_id');
+      console.log('🗑️ Cleared session ID from storage');
+    } catch (e) {
+      console.warn('Failed to clear session ID from localStorage:', e);
+    }
+  }
+
+  buildUrl() {
+    let url = this.baseUrl;
+    if (this.sessionId) {
+      url += `?session_id=${encodeURIComponent(this.sessionId)}`;
+    }
+    return url;
+  }
+
+  connect() {
+    if (this.socket && (this.socket.readyState === WebSocket.CONNECTING || this.socket.readyState === WebSocket.OPEN)) {
+      console.log('⚠️ Already connected or connecting');
+      return;
+    }
+
+    this.intentionallyClosed = false;
+    const url = this.buildUrl();
+    console.log(`🔌 Connecting to ${url}`);
+
+    try {
+      this.socket = new WebSocket(url);
+      this.setupSocketHandlers();
+    } catch (e) {
+      console.error('Failed to create WebSocket:', e);
+      this.scheduleReconnect();
+    }
+  }
+
+  setupSocketHandlers() {
+    this.socket.onopen = () => {
+      console.log('✅ WebSocket connected');
+      this.backoff.reset();
+      this.isReconnecting = false;
+      
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      
+      this.onopen();
+    };
+
+    this.socket.onmessage = (event) => {
+      // Handle session management messages
+      if (typeof event.data === 'string') {
+        try {
+          const msg = JSON.parse(event.data);
+          
+          // Phase 2 P3: Handle session_id message (T089)
+          if (msg.type === 'session_id') {
+            this.saveSessionId(msg.session_id);
+            console.log(`🆔 Received new session ID: ${msg.session_id.substring(0, 8)}...`);
+          }
+          // Phase 2 P3: Handle session_restored message (T090)
+          else if (msg.type === 'session_restored') {
+            console.log(`🔄 Session restored: ${msg.session_id.substring(0, 8)}... (${msg.message_count} messages)`);
+            this.onreconnected(msg);
+          }
+        } catch (e) {
+          // Not JSON or parsing failed, pass through
+        }
+      }
+      
+      this.onmessage(event);
+    };
+
+    this.socket.onclose = (event) => {
+      console.log(`❌ WebSocket closed (code: ${event.code}, reason: ${event.reason || 'none'})`);
+      this.socket = null;
+      
+      if (!this.intentionallyClosed) {
+        this.scheduleReconnect();
+      }
+      
+      this.onclose(event);
+    };
+
+    this.socket.onerror = (error) => {
+      console.error('💥 WebSocket error:', error);
+      this.onerror(error);
+    };
+  }
+
+  scheduleReconnect() {
+    if (this.intentionallyClosed) {
+      console.log('⏹️ Intentionally closed, not reconnecting');
+      return;
+    }
+
+    if (this.backoff.shouldGiveUp()) {
+      console.error(`❌ Max reconnection attempts (${this.backoff.maxAttempts}) reached. Giving up.`);
+      this.onreconnectfailed();
+      return;
+    }
+
+    const delay = this.backoff.nextDelay();
+    const attempt = this.backoff.getAttempt();
+    
+    console.log(`🔄 Reconnecting in ${delay}ms (attempt ${attempt}/${this.backoff.maxAttempts})...`);
+    this.isReconnecting = true;
+    this.onreconnecting(attempt, this.backoff.maxAttempts, delay);
+
+    this.reconnectTimer = setTimeout(() => {
+      this.connect();
+    }, delay);
+  }
+
+  send(data) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(data);
+      return true;
+    }
+    console.warn('⚠️ Cannot send: WebSocket not open');
+    return false;
+  }
+
+  close() {
+    this.intentionallyClosed = true;
+    
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    
+    console.log('⏹️ WebSocket closed intentionally');
+  }
+
+  get readyState() {
+    return this.socket ? this.socket.readyState : WebSocket.CLOSED;
+  }
+
+  isConnected() {
+    return this.socket && this.socket.readyState === WebSocket.OPEN;
+  }
+}
+
+// =============================================================================
+// Original Application Code (with WebSocketClient integration)
+// =============================================================================
+
 const statusDiv = document.getElementById("status");
 const messagesDiv = document.getElementById("messages");
 const speedSlider = document.getElementById("speedSlider");
 speedSlider.disabled = true;  // start disabled
 
-let socket = null;
+let wsClient = null;  // Phase 2 P3: Changed from 'socket' to 'wsClient'
 let audioContext = null;
 let mediaStream = null;
 let micWorkletNode = null;
@@ -58,7 +298,9 @@ function flushBatch() {
   const flags = isTTSPlaying ? 1 : 0;
   batchView.setUint32(4, flags, false);
 
-  socket.send(batchBuffer);
+  if (wsClient && wsClient.isConnected()) {
+    wsClient.send(batchBuffer);
+  }
 
   bufferPool.push(batchBuffer);
   batchBuffer = null;
@@ -145,20 +387,20 @@ async function setupTTSPlayback() {
   ttsWorkletNode.port.onmessage = (event) => {
     const { type } = event.data;
     if (type === 'ttsPlaybackStarted') {
-      if (!isTTSPlaying && socket && socket.readyState === WebSocket.OPEN) {
+      if (!isTTSPlaying && wsClient && wsClient.isConnected()) {
         isTTSPlaying = true;
         console.log(
           "TTS playback started. Reason: ttsWorkletNode Event ttsPlaybackStarted."
         );
-        socket.send(JSON.stringify({ type: 'tts_start' }));
+        wsClient.send(JSON.stringify({ type: 'tts_start' }));
       }
     } else if (type === 'ttsPlaybackStopped') {
-      if (isTTSPlaying && socket && socket.readyState === WebSocket.OPEN) {
+      if (isTTSPlaying && wsClient && wsClient.isConnected()) {
         isTTSPlaying = false;
         console.log(
           "TTS playback stopped. Reason: ttsWorkletNode Event ttsPlaybackStopped."
         );
-        socket.send(JSON.stringify({ type: 'tts_stop' }));
+        wsClient.send(JSON.stringify({ type: 'tts_stop' }));
       }
     }
   };
@@ -257,7 +499,9 @@ function handleJSONMessage({ type, content }) {
     isTTSPlaying = false;
     ignoreIncomingTTS = true;
     console.log("TTS playback stopped. Reason: tts_interruption.");
-    socket.send(JSON.stringify({ type: 'tts_stop' }));
+    if (wsClient && wsClient.isConnected()) {
+      wsClient.send(JSON.stringify({ type: 'tts_stop' }));
+    }
     return;
   }
 }
@@ -276,15 +520,15 @@ document.getElementById("clearBtn").onclick = () => {
   chatHistory = [];
   typingUser = typingAssistant = "";
   renderMessages();
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'clear_history' }));
+  if (wsClient && wsClient.isConnected()) {
+    wsClient.send(JSON.stringify({ type: 'clear_history' }));
   }
 };
 
 speedSlider.addEventListener("input", (e) => {
   const speedValue = parseInt(e.target.value);
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({
+  if (wsClient && wsClient.isConnected()) {
+    wsClient.send(JSON.stringify({
       type: 'set_speed',
       speed: speedValue
     }));
@@ -292,56 +536,96 @@ speedSlider.addEventListener("input", (e) => {
   console.log("Speed setting changed to:", speedValue);
 });
 
+// =============================================================================
+// Phase 2 P3: Connection Status UI (T091)
+// =============================================================================
+
+function updateConnectionStatus(status, message) {
+  statusDiv.textContent = message;
+  statusDiv.className = `status-${status}`;  // For CSS styling
+}
+
+// =============================================================================
+// UI Controls
+// =============================================================================
+
 document.getElementById("startBtn").onclick = async () => {
-  if (socket && socket.readyState === WebSocket.OPEN) {
+  if (wsClient && wsClient.isConnected()) {
     statusDiv.textContent = "Already recording.";
     return;
   }
-  statusDiv.textContent = "Initializing connection...";
+  
+  updateConnectionStatus('connecting', 'Initializing connection...');
 
   const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket = new WebSocket(`${wsProto}//${location.host}/ws`);
-
-  socket.onopen = async () => {
-    statusDiv.textContent = "Connected. Activating mic and TTS…";
-    await startRawPcmCapture();
-    await setupTTSPlayback();
-    speedSlider.disabled = false; 
-  };
-
-  socket.onmessage = (evt) => {
-    if (typeof evt.data === "string") {
-      try {
-        const msg = JSON.parse(evt.data);
-        handleJSONMessage(msg);
-      } catch (e) {
-        console.error("Error parsing message:", e);
+  const wsUrl = `${wsProto}//${location.host}/ws`;
+  
+  // Phase 2 P3: Create WebSocketClient with reconnection support
+  wsClient = new WebSocketClient(wsUrl, {
+    onopen: async () => {
+      updateConnectionStatus('connected', 'Connected. Activating mic and TTS…');
+      await startRawPcmCapture();
+      await setupTTSPlayback();
+      speedSlider.disabled = false;
+      updateConnectionStatus('recording', 'Recording...');
+    },
+    
+    onmessage: (evt) => {
+      if (typeof evt.data === "string") {
+        try {
+          const msg = JSON.parse(evt.data);
+          handleJSONMessage(msg);
+        } catch (e) {
+          console.error("Error parsing message:", e);
+        }
       }
+    },
+    
+    onclose: () => {
+      if (wsClient && !wsClient.intentionallyClosed) {
+        updateConnectionStatus('disconnected', 'Connection lost. Reconnecting...');
+      } else {
+        updateConnectionStatus('stopped', 'Connection closed.');
+        flushRemainder();
+        cleanupAudio();
+        speedSlider.disabled = true;
+      }
+    },
+    
+    onerror: (err) => {
+      console.error('WebSocket error:', err);
+    },
+    
+    onreconnecting: (attempt, maxAttempts, delay) => {
+      updateConnectionStatus(
+        'reconnecting',
+        `Reconnecting... (attempt ${attempt}/${maxAttempts}, retry in ${delay}ms)`
+      );
+    },
+    
+    onreconnected: (msg) => {
+      updateConnectionStatus('reconnected', 'Reconnected! Session restored.');
+      console.log(`🔄 Session restored with ${msg.message_count} messages`);
+    },
+    
+    onreconnectfailed: () => {
+      updateConnectionStatus('failed', 'Reconnection failed. Please refresh the page.');
+      cleanupAudio();
+      speedSlider.disabled = true;
     }
-  };
-
-  socket.onclose = () => {
-    statusDiv.textContent = "Connection closed.";
-    flushRemainder();
-    cleanupAudio();
-    speedSlider.disabled = true;
-  };
-
-  socket.onerror = (err) => {
-    statusDiv.textContent = "Connection error.";
-    cleanupAudio();
-    console.error(err);
-    speedSlider.disabled = true; 
-  };
+  });
+  
+  wsClient.connect();
 };
 
 document.getElementById("stopBtn").onclick = () => {
-  if (socket && socket.readyState === WebSocket.OPEN) {
+  if (wsClient) {
     flushRemainder();
-    socket.close();
+    wsClient.close();
+    wsClient = null;
   }
   cleanupAudio();
-  statusDiv.textContent = "Stopped.";
+  updateConnectionStatus('stopped', 'Stopped.');
 };
 
 document.getElementById("copyBtn").onclick = () => {

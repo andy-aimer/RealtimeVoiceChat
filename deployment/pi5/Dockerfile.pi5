@@ -1,0 +1,42 @@
+# Raspberry Pi 5 optimized Dockerfile
+FROM python:3.11-slim-bookworm
+
+# Install system dependencies for Pi 5
+RUN apt-get update && apt-get install -y \
+    portaudio19-dev \
+    libasound2-dev \
+    libpulse-dev \
+    ffmpeg \
+    libsndfile1 \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/ssl
+
+# Set environment for Pi 5
+ENV PYTHONPATH=/app
+ENV PROD_ENVIRONMENT=pi5
+ENV PROD_MAX_WORKERS=2
+ENV PROD_MEMORY_LIMIT=1GB
+
+# Expose ports
+EXPOSE 8000 8443
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the application
+CMD ["python", "-m", "uvicorn", "production.production_server:app", "--host", "0.0.0.0", "--port", "8000"]

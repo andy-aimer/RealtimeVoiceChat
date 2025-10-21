@@ -37,9 +37,6 @@ from exceptions import (
 # Phase 1: Import security validators
 from security.validators import validate_message, ValidationError as ValidatorError
 
-# Phase 2 P3: Import session management
-from session import SessionManager, ConnectionState
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -149,51 +146,10 @@ async def lifespan(app: FastAPI):
         pipeline_latency=app.state.SpeechPipelineManager.full_output_pipeline_latency / 1000, # seconds
     )
     app.state.Aborting = False # Keep this? Its usage isn't clear in the provided snippet. Minimizing changes.
-    
-    # Phase 2 P2: Enable thermal monitoring for LLM (T052)
-    # Get thermal thresholds from environment variables
-    thermal_trigger = float(os.getenv("THERMAL_TRIGGER_THRESHOLD", "85.0"))
-    thermal_resume = float(os.getenv("THERMAL_RESUME_THRESHOLD", "80.0"))
-    thermal_interval = float(os.getenv("THERMAL_CHECK_INTERVAL", "5.0"))
-    
-    if app.state.SpeechPipelineManager.llm.enable_thermal_monitoring(
-        trigger_threshold=thermal_trigger,
-        resume_threshold=thermal_resume,
-        check_interval=thermal_interval
-    ):
-        logger.info(
-            f"🖥️🌡️ Thermal monitoring enabled: "
-            f"trigger={thermal_trigger}°C, resume={thermal_resume}°C, interval={thermal_interval}s"
-        )
-    else:
-        logger.warning("🖥️🌡️ Thermal monitoring not available - continuing without hardware protection")
-    
-    # Phase 2 P3: Initialize session manager (T078)
-    session_timeout = int(os.getenv("SESSION_TIMEOUT_MINUTES", "5"))
-    cleanup_interval = int(os.getenv("SESSION_CLEANUP_INTERVAL", "60"))
-    app.state.SessionManager = SessionManager(
-        timeout_minutes=session_timeout,
-        cleanup_interval=cleanup_interval
-    )
-    await app.state.SessionManager.start_cleanup_task()
-    logger.info(
-        f"🖥️🔗 Session manager initialized: "
-        f"timeout={session_timeout}min, cleanup_interval={cleanup_interval}s"
-    )
 
     yield
 
     logger.info("🖥️⏹️ Server shutting down")
-    
-    # Phase 2 P3: Stop session cleanup task
-    if hasattr(app.state, 'SessionManager'):
-        await app.state.SessionManager.stop_cleanup_task()
-        logger.info("🖥️🔗 Session manager stopped")
-    
-    # Phase 2 P2: Disable thermal monitoring on shutdown
-    if hasattr(app.state.SpeechPipelineManager.llm, 'disable_thermal_monitoring'):
-        app.state.SpeechPipelineManager.llm.disable_thermal_monitoring()
-    
     app.state.AudioInputProcessor.shutdown()
 
 # --------------------------------------------------------------------
@@ -339,26 +295,6 @@ async def health_check():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "components": components
         }
-        
-        # Phase 2 P2: Include thermal state in health check (T053)
-        try:
-            thermal_state = app.state.SpeechPipelineManager.llm.get_thermal_state()
-            if thermal_state:
-                response_data["thermal"] = thermal_state
-                # Update overall status if thermal protection is active
-                if thermal_state.get("protection_active"):
-                    if overall_status == "healthy":
-                        overall_status = "degraded"
-                    response_data["status"] = overall_status
-        except Exception as thermal_err:
-            logger.debug(f"Could not get thermal state: {thermal_err}")
-        
-        # Phase 2 P3: Include session statistics in health check (T084)
-        try:
-            session_stats = await app.state.SessionManager.get_stats()
-            response_data["sessions"] = session_stats
-        except Exception as session_err:
-            logger.debug(f"Could not get session stats: {session_err}")
         
         # Determine HTTP status code
         status_code = 200
@@ -525,7 +461,7 @@ def format_timestamp_ns(timestamp_ns: int) -> str:
 # WebSocket data processing
 # --------------------------------------------------------------------
 
-async def process_incoming_data(ws: WebSocket, app: FastAPI, incoming_chunks: asyncio.Queue, callbacks: 'TranscriptionCallbacks', session_id: str) -> None:
+async def process_incoming_data(ws: WebSocket, app: FastAPI, incoming_chunks: asyncio.Queue, callbacks: 'TranscriptionCallbacks') -> None:
     """
     Receives messages via WebSocket, processes audio and text messages.
 
@@ -534,23 +470,16 @@ async def process_incoming_data(ws: WebSocket, app: FastAPI, incoming_chunks: as
     Applies back-pressure if the queue is full.
     Parses text messages (assumed JSON) and triggers actions based on message type
     (e.g., updates client TTS state via `callbacks`, clears history, sets speed).
-    
-    Phase 2 P3: Updates session activity timestamp on each message.
 
     Args:
         ws: The WebSocket connection instance.
         app: The FastAPI application instance (for accessing global state if needed).
         incoming_chunks: An asyncio queue to put processed audio metadata dictionaries into.
         callbacks: The TranscriptionCallbacks instance for this connection to manage state.
-        session_id: The session identifier for activity tracking.
     """
     try:
         while True:
             msg = await ws.receive()
-            
-            # Phase 2 P3: Update session activity (T082)
-            await app.state.SessionManager.touch_session(session_id)
-            
             if "bytes" in msg and msg["bytes"]:
                 raw = msg["bytes"]
 
@@ -845,18 +774,16 @@ class TranscriptionCallbacks:
     `message_queue` and manages interaction logic like interruptions and final answer delivery.
     It also includes a threaded worker to handle abort checks based on partial transcription.
     """
-    def __init__(self, app: FastAPI, message_queue: asyncio.Queue, session_id: str = None):
+    def __init__(self, app: FastAPI, message_queue: asyncio.Queue):
         """
         Initializes the TranscriptionCallbacks instance for a WebSocket connection.
 
         Args:
             app: The FastAPI application instance (to access global components).
             message_queue: An asyncio queue for sending messages back to the client.
-            session_id: Optional session identifier for context tracking.
         """
         self.app = app
         self.message_queue = message_queue
-        self.session_id = session_id  # Phase 2 P3: Store session_id
         self.final_transcription = ""
         self.abort_text = ""
         self.last_abort_text = ""
@@ -1040,8 +967,6 @@ class TranscriptionCallbacks:
         Callback invoked when the final transcription result for a user turn is available.
 
         Logs the final transcription and stores it.
-        
-        Phase 2 P3: Updates session conversation context.
 
         Args:
             txt: The final transcription text.
@@ -1049,14 +974,6 @@ class TranscriptionCallbacks:
         logger.info(f"\n{Colors.apply('🖥️✅ FINAL USER REQUEST (STT Callback): ').green}{txt}")
         if not self.final_transcription: # Store it if not already set by on_before_final logic
              self.final_transcription = txt
-        
-        # Phase 2 P3: Add to session context (T083)
-        if hasattr(self, 'session_id') and self.session_id:
-            asyncio.create_task(
-                self.app.state.SessionManager.update_session(
-                    self.session_id, "user", txt
-                )
-            )
 
     def abort_generations(self, reason: str):
         """
@@ -1153,8 +1070,6 @@ class TranscriptionCallbacks:
         Constructs the full answer from quick and final parts if available.
         If `forced` and no full answer exists, uses the last partial answer.
         Cleans the text and sends it as 'final_assistant_answer' if not already sent.
-        
-        Phase 2 P3: Updates session conversation context.
 
         Args:
             forced: If True, attempts to send the last partial answer if no complete
@@ -1191,15 +1106,6 @@ class TranscriptionCallbacks:
                     "content": cleaned_answer
                 })
                 app.state.SpeechPipelineManager.history.append({"role": "assistant", "content": cleaned_answer})
-                
-                # Phase 2 P3: Add to session context (T083)
-                if hasattr(self, 'session_id') and self.session_id:
-                    asyncio.create_task(
-                        self.app.state.SessionManager.update_session(
-                            self.session_id, "assistant", cleaned_answer
-                        )
-                    )
-                
                 self.final_assistant_answer_sent = True
                 self.final_assistant_answer = cleaned_answer # Store the sent answer
             else:
@@ -1215,7 +1121,7 @@ class TranscriptionCallbacks:
 # Main WebSocket endpoint
 # --------------------------------------------------------------------
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket, session_id: Optional[str] = None):
+async def websocket_endpoint(ws: WebSocket):
     """
     Handles the main WebSocket connection for real-time voice chat.
 
@@ -1223,56 +1129,18 @@ async def websocket_endpoint(ws: WebSocket, session_id: Optional[str] = None):
     initializes audio/message queues, and creates asyncio tasks for handling
     incoming data, audio processing, outgoing text messages, and outgoing TTS chunks.
     Manages the lifecycle of these tasks and cleans up on disconnect.
-    
-    Phase 2 P3: Supports session restoration via session_id query parameter.
-    If provided and valid, restores conversation context from previous connection.
 
     Args:
         ws: The WebSocket connection instance provided by FastAPI.
-        session_id: Optional session identifier for reconnection (from query param).
     """
     await ws.accept()
-    
-    # Phase 2 P3: Handle session creation/restoration (T079-T081)
-    session = None
-    if session_id:
-        # Attempt to restore existing session
-        session = await app.state.SessionManager.restore_session(session_id)
-        if session:
-            logger.info(
-                f"🖥️✅ Client reconnected via WebSocket (session: {session_id[:8]}...)"
-            )
-            # Send session restoration confirmation with context
-            recent_context = session.get_recent_context()
-            await ws.send_json({
-                "type": "session_restored",
-                "session_id": session_id,
-                "message_count": len(recent_context)
-            })
-        else:
-            logger.warning(
-                f"🖥️⚠️ Session restoration failed (expired or invalid): {session_id[:8]}..."
-            )
-            # Create new session instead
-            session_id = await app.state.SessionManager.create_session()
-            session = await app.state.SessionManager.get_session(session_id)
-    else:
-        # Create new session
-        session_id = await app.state.SessionManager.create_session()
-        session = await app.state.SessionManager.get_session(session_id)
-        logger.info(f"🖥️✅ Client connected via WebSocket (new session: {session_id[:8]}...)")
-    
-    # Send session_id to client for reconnection support
-    await ws.send_json({
-        "type": "session_id",
-        "session_id": session_id
-    })
+    logger.info("🖥️✅ Client connected via WebSocket.")
 
     message_queue = asyncio.Queue()
     audio_chunks = asyncio.Queue()
 
     # Set up callback manager - THIS NOW HOLDS THE CONNECTION-SPECIFIC STATE
-    callbacks = TranscriptionCallbacks(app, message_queue, session_id)
+    callbacks = TranscriptionCallbacks(app, message_queue)
 
     # Assign callbacks to the AudioInputProcessor (global component)
     # These methods within callbacks will now operate on its *instance* state
@@ -1292,7 +1160,7 @@ async def websocket_endpoint(ws: WebSocket, session_id: Optional[str] = None):
     # Create tasks for handling different responsibilities
     # Pass the 'callbacks' instance to tasks that need connection-specific state
     tasks = [
-        asyncio.create_task(process_incoming_data(ws, app, audio_chunks, callbacks, session_id)), # Pass session_id
+        asyncio.create_task(process_incoming_data(ws, app, audio_chunks, callbacks)), # Pass callbacks
         asyncio.create_task(app.state.AudioInputProcessor.process_chunk_queue(audio_chunks)),
         asyncio.create_task(send_text_messages(ws, message_queue)),
         asyncio.create_task(send_tts_chunks(app, message_queue, callbacks)), # Pass callbacks
@@ -1310,11 +1178,6 @@ async def websocket_endpoint(ws: WebSocket, session_id: Optional[str] = None):
         logger.error(f"🖥️💥 {Colors.apply('ERROR').red} in WebSocket session: {repr(e)}")
     finally:
         logger.info("🖥️🧹 Cleaning up WebSocket tasks...")
-        
-        # Phase 2 P3: Mark session as disconnected (T085)
-        if session_id:
-            await app.state.SessionManager.disconnect_session(session_id)
-        
         for task in tasks:
             if not task.done():
                 task.cancel()

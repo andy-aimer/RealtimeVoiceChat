@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Lifecycle Test - Phase 2 P3</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .status-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .status-indicator {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        /* Status colors */
+        .status-connecting { color: #f39c12; }
+        .status-connected { color: #2ecc71; }
+        .status-disconnected { color: #e74c3c; }
+        .status-reconnecting { color: #f39c12; }
+        .status-reconnect-failed { color: #e74c3c; }
+        .status-reconnected { color: #2ecc71; }
+        
+        .session-info {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .log-section {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        
+        .log-info { color: #3498db; }
+        .log-success { color: #2ecc71; }
+        .log-warning { color: #f39c12; }
+        .log-error { color: #e74c3c; }
+        
+        .test-results {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .test-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .test-pass { color: #2ecc71; }
+        .test-fail { color: #e74c3c; }
+        .test-pending { color: #f39c12; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 WebSocket Lifecycle Test</h1>
+        <p style="text-align: center; opacity: 0.8; margin-bottom: 30px;">
+            Phase 2 P3 - WebSocket Reconnection & Session Persistence Testing
+        </p>
+        
+        <div class="status-section">
+            <div id="statusIndicator" class="status-indicator status-disconnected">
+                Disconnected
+            </div>
+            <div id="statusDetails">
+                Ready to connect...
+            </div>
+        </div>
+        
+        <div class="session-info">
+            <div><strong>Session ID:</strong> <span id="sessionId">None</span></div>
+            <div><strong>Connection Attempts:</strong> <span id="connectionAttempts">0</span></div>
+            <div><strong>Last Active:</strong> <span id="lastActive">Never</span></div>
+            <div><strong>Messages Sent:</strong> <span id="messagesSent">0</span></div>
+            <div><strong>Messages Received:</strong> <span id="messagesReceived">0</span></div>
+        </div>
+        
+        <div class="controls">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            <button id="sendTestMsg" onclick="sendTestMessage()" disabled>Send Test Message</button>
+            <button id="clearSession" onclick="clearSession()">Clear Session</button>
+            <button id="clearLogs" onclick="clearLogs()">Clear Logs</button>
+            <button id="testReconnection" onclick="testReconnection()" disabled>Test Reconnection</button>
+        </div>
+        
+        <div class="test-results">
+            <h3>🧪 Test Results</h3>
+            <div class="test-item">
+                <span>Initial Connection</span>
+                <span id="test-initial" class="test-pending">⏳ Pending</span>
+            </div>
+            <div class="test-item">
+                <span>Session ID Persistence</span>
+                <span id="test-session" class="test-pending">⏳ Pending</span>
+            </div>
+            <div class="test-item">
+                <span>Reconnection Logic</span>
+                <span id="test-reconnect" class="test-pending">⏳ Pending</span>
+            </div>
+            <div class="test-item">
+                <span>Message Echo</span>
+                <span id="test-message" class="test-pending">⏳ Pending</span>
+            </div>
+            <div class="test-item">
+                <span>Session Restoration</span>
+                <span id="test-restore" class="test-pending">⏳ Pending</span>
+            </div>
+        </div>
+        
+        <div class="log-section" id="logContainer">
+            <div class="log-entry log-info">[Ready] WebSocket Lifecycle Test Interface Loaded</div>
+            <div class="log-entry log-info">[Info] Use controls above to test WebSocket reconnection features</div>
+            <div class="log-entry log-info">[Info] Check browser DevTools for additional debugging</div>
+        </div>
+    </div>
+
+    <script src="/static/websocket-test.js"></script>
+</body>
+</html>

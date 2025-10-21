@@ -9,4 +9,6 @@ Modules:
     backoff: Exponential backoff utilities for retry logic
 """
 
-__all__ = []
+from .backoff import ExponentialBackoff
+
+__all__ = ["ExponentialBackoff"]

@@ -1,0 +1,205 @@
+# Production Docker Compose Configuration
+# Implements security recommendations from Phase 2 P4 audit
+
+version: '3.8'
+
+services:
+  # Production application server
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: realtimevoicechat_production
+    restart: unless-stopped
+    
+    # Network configuration
+    ports:
+      - "8000:8000"   # HTTP (redirect to HTTPS)
+      - "8443:8443"   # HTTPS/WSS
+    
+    # Environment configuration
+    environment:
+      # Server settings
+      - PROD_HOST=0.0.0.0
+      - PROD_PORT=8000
+      - PROD_SSL_PORT=8443
+      
+      # SSL settings (enable when certificates are available)
+      - PROD_USE_SSL=true
+      - PROD_SSL_CERT_PATH=/app/ssl/server.crt
+      - PROD_SSL_KEY_PATH=/app/ssl/server.key
+      
+      # Security settings
+      - PROD_RATE_LIMIT_ENABLED=true
+      - PROD_RATE_LIMIT_REQUESTS=100
+      - PROD_RATE_LIMIT_WINDOW=60
+      
+      # Authentication (optional - enable for multi-user)
+      - PROD_AUTH_ENABLED=false
+      - PROD_AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-change-me-in-production}
+      
+      # CORS settings
+      - PROD_CORS_ORIGINS=https://localhost:8443,https://127.0.0.1:8443
+      
+      # WebSocket settings
+      - PROD_WS_MAX_SIZE=1048576
+      - PROD_WS_PING_INTERVAL=30
+      - PROD_WS_PING_TIMEOUT=10
+      
+      # Session settings
+      - PROD_SESSION_TIMEOUT=300
+      - PROD_SESSION_MAX_CONCURRENT=100
+      
+      # Monitoring settings
+      - PROD_MONITOR_HOST=127.0.0.1
+      - PROD_MONITOR_PORT=8001
+      - PROD_METRICS_ENABLED=true
+      
+      # Logging settings
+      - PROD_LOG_LEVEL=INFO
+      - PROD_LOG_FORMAT=json
+      - PROD_LOG_FILE=/app/logs/app.log
+    
+    # Volume mounts
+    volumes:
+      # SSL certificates (create this directory and add your certificates)
+      - ./ssl:/app/ssl:ro
+      
+      # Application logs
+      - ./logs:/app/logs:rw
+      
+      # Configuration (optional)
+      - ./.env.production:/app/.env.production:ro
+    
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # Dependencies
+    depends_on:
+      - monitoring
+    
+    # Network
+    networks:
+      - voicechat_network
+
+  # Monitoring dashboard (internal only)
+  monitoring:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: realtimevoicechat_monitoring
+    restart: unless-stopped
+    
+    # Only expose monitoring port internally
+    ports:
+      - "127.0.0.1:8001:8001"
+    
+    # Environment for monitoring
+    environment:
+      - PROD_MONITOR_HOST=0.0.0.0
+      - PROD_MONITOR_PORT=8001
+      - PROD_LOG_LEVEL=INFO
+    
+    # Override command to run monitoring
+    command: ["python", "monitoring/test_monitor.py"]
+    
+    # Volume mounts
+    volumes:
+      - ./logs:/app/logs:rw
+    
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # Network
+    networks:
+      - voicechat_network
+
+  # Reverse proxy (optional - for load balancing)
+  proxy:
+    image: nginx:alpine
+    container_name: realtimevoicechat_proxy
+    restart: unless-stopped
+    
+    # Expose standard ports
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    # Configuration
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx:rw
+    
+    # Dependencies
+    depends_on:
+      - app
+    
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # Network
+    networks:
+      - voicechat_network
+
+# Network configuration
+networks:
+  voicechat_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volume configuration
+volumes:
+  app_logs:
+    driver: local
+  ssl_certs:
+    driver: local
