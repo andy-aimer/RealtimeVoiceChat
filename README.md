@@ -57,7 +57,9 @@ This project leverages powerful AI models, which have some requirements:
 
 - **Operating System:**
   - **Docker:** Linux is recommended for the best GPU integration with Docker.
-  - **Manual:** The provided script (`install.bat`) is for Windows. Manual steps are possible on Linux/macOS but may require more troubleshooting (especially for DeepSpeed).
+  - **Windows:** The provided script (`install.bat`) provides automated setup.
+  - **macOS:** Native support with optimized installation scripts and configuration.
+  - **Manual:** Manual steps are possible on all platforms but may require more troubleshooting (especially for DeepSpeed).
 - **🐍 Python:** 3.9 or higher (if setting up manually).
 - **🚀 GPU:** **A powerful CUDA-enabled NVIDIA GPU is _highly recommended_**, especially for faster STT (Whisper) and TTS (Coqui). Performance on CPU-only or weaker GPUs will be significantly slower.
   - The setup assumes **CUDA 12.1**. Adjust PyTorch installation if you have a different CUDA version.
@@ -189,6 +191,65 @@ This method requires managing the Python environment yourself. It offers more di
     pip install -r requirements.txt
     ```
     - **Note on DeepSpeed:** The `requirements.txt` may include DeepSpeed. Installation can be complex, especially on Windows. The `install.bat` tries a precompiled wheel. If manual installation fails, you might need to build it from source or consult resources like [deepspeedpatcher](https://github.com/erew123/deepspeedpatcher) (use at your own risk). Coqui TTS performance benefits most from DeepSpeed.
+
+</details>
+
+<details>
+<summary><strong>🍎 Option C: macOS Installation (Native Support)</strong></summary>
+
+This project has native macOS support with optimized configuration and easy setup scripts.
+
+**C1) Quick One-Command Setup:**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/andy-aimer/RealtimeVoiceChat/main/deployment/macos/quick_install_macos.sh | bash
+```
+
+**C2) Manual macOS Setup:**
+
+1.  **Install Homebrew** (if not already installed):
+
+    ```bash
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    ```
+
+2.  **Install dependencies:**
+
+    ```bash
+    brew install python@3.11 portaudio ffmpeg git
+    ```
+
+3.  **Create virtual environment:**
+
+    ```bash
+    python3.11 -m venv venv_macos
+    source venv_macos/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    ```
+
+4.  **Generate SSL certificates:**
+    ```bash
+    mkdir -p ~/ssl
+    openssl req -x509 -newkey rsa:2048 -keyout ~/ssl/server.key -out ~/ssl/server.crt -days 365 -nodes \
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+    ```
+
+**Convenient aliases** (added automatically with quick setup):
+
+```bash
+alias rtvc="cd ~/RealtimeVoiceChat && source venv_macos/bin/activate"
+alias start-rtvc="cd ~/RealtimeVoiceChat && ./start_macos.sh"
+alias start-rtvc-ssl="cd ~/RealtimeVoiceChat && ./start_macos_ssl.sh"
+```
+
+**Access Points:**
+
+- HTTP: `http://localhost:8000`
+- HTTPS: `https://localhost:8443`
+- Monitoring: `http://localhost:8001`
+
+For complete macOS installation guide, see: [`deployment/macos_installation.md`](deployment/macos_installation.md)
 
 </details>
 
