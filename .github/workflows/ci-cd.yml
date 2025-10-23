@@ -88,7 +88,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run coverage
         run: |
-          pytest --cov=code --cov-report=xml --cov-report=term
+          pytest --cov=src --cov-report=xml --cov-report=term
       - name: Check threshold
         run: |
           COVERAGE=$(python -c "import xml.etree.ElementTree as ET; print(float(ET.parse('coverage.xml').getroot().attrib['line-rate'])*100)")

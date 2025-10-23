@@ -33,7 +33,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=code --cov-report=xml --cov-report=term-missing tests/
+          pytest --cov=src --cov-report=xml --cov-report=term-missing tests/
         continue-on-error: true
 
       - name: Check coverage threshold
