@@ -75,7 +75,7 @@ jobs:
           echo "Validating thermal monitoring implementation..."
           python3 << 'EOF'
           import sys
-          sys.path.insert(0, 'code')
+          sys.path.insert(0, 'src')
 
           from metrics import get_cpu_temperature
 
@@ -95,7 +95,7 @@ jobs:
       - name: Check file size limits
         run: |
           echo "Checking 300-line file size limit..."
-          find code/ -name "*.py" -type f | while read file; do
+          find src/ -name "*.py" -type f | while read file; do
             lines=$(wc -l < "$file")
             if [ $lines -gt 300 ]; then
               echo "::error file=$file::File exceeds 300 lines: $lines"
@@ -110,12 +110,12 @@ jobs:
           echo "Checking for network dependencies in monitoring code..."
 
           # Check for network imports (should only be in server.py, not monitoring)
-          if grep -r "import requests" code/health_checks.py code/metrics.py code/monitoring/ 2>/dev/null; then
+          if grep -r "import requests" src/health_checks.py src/metrics.py src/monitoring/ 2>/dev/null; then
             echo "::error::Monitoring code should not have network dependencies"
             exit 1
           fi
 
-          if grep -r "import urllib" code/health_checks.py code/metrics.py code/monitoring/ 2>/dev/null; then
+          if grep -r "import urllib" src/health_checks.py src/metrics.py src/monitoring/ 2>/dev/null; then
             echo "::error::Monitoring code should not have network dependencies"
             exit 1
           fi
@@ -127,7 +127,7 @@ jobs:
           echo "Validating swap thresholds..."
           python3 << 'EOF'
           import sys
-          sys.path.insert(0, 'code')
+          sys.path.insert(0, 'src')
 
           import psutil
 
@@ -186,7 +186,7 @@ jobs:
           Run these commands:
           ```bash
           # Check temperature monitoring
-          python3 -c "import sys; sys.path.insert(0, 'code'); from metrics import get_cpu_temperature; print(f'CPU Temp: {get_cpu_temperature()}°C')"
+          python3 -c "import sys; sys.path.insert(0, 'src'); from metrics import get_cpu_temperature; print(f'CPU Temp: {get_cpu_temperature()}°C')"
 
           # Run monitoring server
           python3 test_server_monitoring.py &

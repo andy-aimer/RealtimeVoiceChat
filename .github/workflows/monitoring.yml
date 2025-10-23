@@ -4,17 +4,17 @@ on:
   push:
     branches: [main, develop, "001-phase-1-foundation"]
     paths:
-      - "code/health_checks.py"
-      - "code/metrics.py"
-      - "code/monitoring/**"
-      - "code/exceptions.py"
+      - "src/health_checks.py"
+      - "src/metrics.py"
+      - "src/monitoring/**"
+      - "src/exceptions.py"
       - "tests/integration/test_monitoring.py"
   pull_request:
     branches: [main, develop]
     paths:
-      - "code/health_checks.py"
-      - "code/metrics.py"
-      - "code/monitoring/**"
+      - "src/health_checks.py"
+      - "src/metrics.py"
+      - "src/monitoring/**"
 
 jobs:
   test-monitoring:

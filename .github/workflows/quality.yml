@@ -28,21 +28,21 @@ jobs:
 
       - name: Check code formatting with black
         run: |
-          black --check --diff code/ tests/
+          black --check --diff src/ tests/
         continue-on-error: true
 
       - name: Check import sorting with isort
         run: |
-          isort --check-only --diff code/ tests/
+          isort --check-only --diff src/ tests/
         continue-on-error: true
 
       - name: Lint with flake8
         run: |
           # Stop the build if there are Python syntax errors or undefined names
-          flake8 code/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
 
           # Exit-zero treats all errors as warnings
-          flake8 code/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+          flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
 
       - name: Check file size limit (300 lines)
         run: |
@@ -56,7 +56,7 @@ jobs:
             else
               echo "✓ $file: $LINES lines"
             fi
-          done < <(find code/ -name "*.py" -type f)
+          done < <(find src/ -name "*.py" -type f)
 
           if [ "$VIOLATIONS" -gt 0 ]; then
             echo "::error::$VIOLATIONS file(s) exceed 300-line limit"
@@ -65,13 +65,13 @@ jobs:
 
       - name: Type checking with mypy
         run: |
-          mypy code/ --ignore-missing-imports --no-strict-optional
+          mypy src/ --ignore-missing-imports --no-strict-optional
         continue-on-error: true
 
       - name: Security check with bandit
         run: |
           pip install bandit
-          bandit -r code/ -ll -f json -o bandit-report.json || true
+          bandit -r src/ -ll -f json -o bandit-report.json || true
 
       - name: Upload security report
         if: always()

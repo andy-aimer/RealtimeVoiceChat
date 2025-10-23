@@ -19,10 +19,11 @@ jobs:
           python-version: "3.12"
       - name: Install tools
         run: pip install flake8 black isort
-      - name: Check formatting
-        run: black --check code/ tests/
-      - name: Lint
-        run: flake8 code/ tests/ --max-line-length=120
+      - name: Check code formatting
+        run: |
+          black --check src/ tests/
+      - name: Lint with flake8
+        run: flake8 src/ tests/ --max-line-length=120
 
   # Stage 2: Unit Tests
   unit-tests:
@@ -129,7 +130,7 @@ jobs:
       - name: Run Bandit
         run: |
           pip install bandit
-          bandit -r code/ -ll || true
+          bandit -r src/ -ll || true
 
   # Stage 7: Pi 5 Validation
   pi5-validation:
@@ -144,7 +145,7 @@ jobs:
       - name: Validate constraints
         run: |
           # Check file sizes
-          find code/ -name "*.py" | while read f; do
+          find src/ -name "*.py" | while read f; do
             lines=$(wc -l < "$f")
             if [ $lines -gt 300 ]; then
               echo "::error::$f exceeds 300 lines"
