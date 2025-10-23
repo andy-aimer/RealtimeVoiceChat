@@ -18,14 +18,14 @@
 
 **Purpose**: Create directory structure and initialize new modules for Phase 2 features
 
-- [ ] T001 Create `code/utils/` directory for lifecycle management utilities
-- [ ] T002 Create `code/monitoring/` directory for thermal monitoring components
-- [ ] T003 Create `code/websocket/` directory for session management
+- [ ] T001 Create `src/utils/` directory for lifecycle management utilities
+- [ ] T002 Create `src/monitoring/` directory for thermal monitoring components
+- [ ] T003 Create `src/websocket/` directory for session management
 - [ ] T004 Create `tests/unit/` directory for Phase 2 unit tests
 - [ ] T005 Create `tests/integration/` directory for Phase 2 integration tests
-- [ ] T006 Create `code/utils/__init__.py` with module docstring
-- [ ] T007 Create `code/monitoring/__init__.py` with module docstring
-- [ ] T008 Create `code/websocket/__init__.py` with module docstring
+- [ ] T006 Create `src/utils/__init__.py` with module docstring
+- [ ] T007 Create `src/monitoring/__init__.py` with module docstring
+- [ ] T008 Create `src/websocket/__init__.py` with module docstring
 
 **Checkpoint**: Directory structure ready for Phase 2 implementation
 
@@ -54,16 +54,16 @@
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Create `ManagedThread` class in `code/utils/lifecycle.py` with `__init__`, `stop()`, `should_stop()` methods
-- [ ] T014 [US1] Add `join()` method with timeout to `ManagedThread` in `code/utils/lifecycle.py`
-- [ ] T015 [US1] Add `__enter__` and `__exit__` context manager methods to `ManagedThread` in `code/utils/lifecycle.py`
-- [ ] T016 [US1] Add exception handling and logging to `ManagedThread` in `code/utils/lifecycle.py`
-- [ ] T017 [US1] Refactor `TurnDetector.__init__` in `code/turndetect.py` to use `ManagedThread` for `text_worker`
-- [ ] T018 [US1] Refactor `TurnDetector.__init__` in `code/turndetect.py` to use `ManagedThread` for `silence_worker`
-- [ ] T019 [US1] Update `_process_text_queue` method in `code/turndetect.py` to check `should_stop()` in loop
-- [ ] T020 [US1] Update `_detect_silence` method in `code/turndetect.py` to check `should_stop()` in loop
-- [ ] T021 [US1] Add `close()` method to `TurnDetector` in `code/turndetect.py` that stops and joins threads
-- [ ] T022 [US1] Add `__enter__` and `__exit__` methods to `TurnDetector` in `code/turndetect.py` for context manager support
+- [ ] T013 [P] [US1] Create `ManagedThread` class in `src/utils/lifecycle.py` with `__init__`, `stop()`, `should_stop()` methods
+- [ ] T014 [US1] Add `join()` method with timeout to `ManagedThread` in `src/utils/lifecycle.py`
+- [ ] T015 [US1] Add `__enter__` and `__exit__` context manager methods to `ManagedThread` in `src/utils/lifecycle.py`
+- [ ] T016 [US1] Add exception handling and logging to `ManagedThread` in `src/utils/lifecycle.py`
+- [ ] T017 [US1] Refactor `TurnDetector.__init__` in `src/turndetect.py` to use `ManagedThread` for all worker threads (e.g., `text_worker`, `silence_worker`, or actual thread names as implemented)
+- [ ] T018 [US1] Refactor `TurnDetector.__init__` in `src/turndetect.py` to use `ManagedThread` for all relevant worker threads (update to match actual implementation, e.g., `audio_worker`, `event_worker`, etc.)
+- [ ] T019 [US1] Update `_process_text_queue` method in `src/turndetect.py` to check `should_stop()` in loop
+- [ ] T020 [US1] Update `_detect_silence` method in `src/turndetect.py` to check `should_stop()` in loop
+- [ ] T021 [US1] Add `close()` method to `TurnDetector` in `src/turndetect.py` that stops and joins threads
+- [ ] T022 [US1] Add `__enter__` and `__exit__` methods to `TurnDetector` in `src/turndetect.py` for context manager support
 - [ ] T023 [P] [US1] Create unit test file `tests/unit/test_thread_cleanup.py` with test for `ManagedThread.stop()` signal
 - [ ] T024 [P] [US1] Add unit test for `ManagedThread.should_stop()` behavior in `tests/unit/test_thread_cleanup.py`
 - [ ] T025 [P] [US1] Add unit test for `ManagedThread` context manager in `tests/unit/test_thread_cleanup.py`
@@ -149,10 +149,10 @@
 
 ### Implementation for User Story 3
 
-- [ ] T066 [P] [US3] Create `ConnectionState` enum in `code/websocket/session_manager.py` (CONNECTED, DISCONNECTED, RECONNECTING, EXPIRED)
-- [ ] T067 [P] [US3] Create `WebSocketSession` dataclass in `code/websocket/session_manager.py` with session fields
-- [ ] T068 [US3] Add session lifecycle methods to `WebSocketSession` in `code/websocket/session_manager.py` (`is_expired`, `touch`, `mark_disconnected`, `mark_reconnecting`, `mark_connected`)
-- [ ] T069 [P] [US3] Create `SessionManager` class in `code/websocket/session_manager.py` with `__init__` and storage dict
+- [ ] T066 [P] [US3] Create `ConnectionState` enum in `src/websocket/session_manager.py` (CONNECTED, DISCONNECTED, RECONNECTING, EXPIRED)
+- [ ] T067 [P] [US3] Create `WebSocketSession` dataclass in `src/websocket/session_manager.py` with session fields
+- [ ] T068 [US3] Add session lifecycle methods to `WebSocketSession` in `src/websocket/session_manager.py` (`is_expired`, `touch`, `mark_disconnected`, `mark_reconnecting`, `mark_connected`)
+- [ ] T069 [P] [US3] Create `SessionManager` class in `src/websocket/session_manager.py` with `__init__` and storage dict
 - [x] T070 [US3] Implement `create_session()` method in `SessionManager` class in `src/session/session_manager.py`
 - [x] T071 [US3] Implement `restore_session()` method in `SessionManager` class in `src/session/session_manager.py`
 - [x] T072 [US3] Implement `update_session()` method in `SessionManager` class in `src/session/session_manager.py`
@@ -312,16 +312,16 @@
 # After Foundational phase (T001-T012) completes, launch all user stories in parallel:
 
 # Developer A: User Story 1 (Thread Cleanup)
-Task T013: "Create ManagedThread class in code/utils/lifecycle.py"
-Task T017: "Refactor TurnDetector in code/turndetect.py"
+Task T013: "Create ManagedThread class in src/utils/lifecycle.py"
+Task T017: "Refactor TurnDetector in src/turndetect.py"
 
 # Developer B: User Story 2 (Thermal Protection)
-Task T037: "Create ThermalState in code/monitoring/thermal_monitor.py"
-Task T039: "Create ThermalMonitor in code/monitoring/thermal_monitor.py"
+Task T037: "Create ThermalState in src/monitoring/thermal_monitor.py"
+Task T039: "Create ThermalMonitor in src/monitoring/thermal_monitor.py"
 
 # Developer C: User Story 3 (WebSocket Lifecycle)
-Task T066: "Create ConnectionState in code/websocket/session_manager.py"
-Task T069: "Create SessionManager in code/websocket/session_manager.py"
+Task T066: "Create ConnectionState in src/websocket/session_manager.py"
+Task T069: "Create SessionManager in src/websocket/session_manager.py"
 ```
 
 ---

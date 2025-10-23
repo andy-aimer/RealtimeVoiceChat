@@ -367,8 +367,8 @@ class TestThermalMonitor:
         monitor.start_monitoring()
         assert monitor._monitor_thread is not None
         
-        # Let it run briefly
-        time.sleep(0.3)
+        # Let it run briefly (ensure at least one interval passes)
+        time.sleep(0.6)
         
         # Stop monitoring
         monitor.stop_monitoring()

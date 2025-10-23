@@ -21,9 +21,9 @@ jobs:
         run: pip install flake8 black isort
       - name: Check code formatting
         run: |
-          black --check src/ tests/
+          black --check src/ dev/tests/
       - name: Lint with flake8
-        run: flake8 src/ tests/ --max-line-length=120
+        run: flake8 src/ dev/tests/ --max-line-length=120
 
   # Stage 2: Unit Tests
   unit-tests:
@@ -44,7 +44,7 @@ jobs:
           pip install -r requirements.txt
       - name: Run unit tests
         run: |
-          pytest tests/unit/ -v --junitxml=junit-${{ matrix.python-version }}.xml
+          pytest dev/tests/unit/ -v --junitxml=junit-${{ matrix.python-version }}.xml
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
@@ -70,7 +70,7 @@ jobs:
           pip install -r requirements.txt
       - name: Run integration tests
         run: |
-          pytest tests/integration/ -v --timeout=300
+          pytest dev/tests/integration/ -v --timeout=300
         continue-on-error: true
 
   # Stage 4: Coverage
@@ -112,7 +112,7 @@ jobs:
         run: pip install fastapi uvicorn psutil httpx
       - name: Test monitoring
         run: |
-          python test_server_monitoring.py &
+          python dev/scripts/test_server_monitoring.py &
           sleep 5
           curl -f http://localhost:8000/health
           curl -f http://localhost:8000/metrics

@@ -12,7 +12,7 @@ import sys
 import os
 
 # Add parent directory to path to import code modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'code'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 # Mark all tests as integration tests
 pytestmark = pytest.mark.integration
@@ -404,7 +404,7 @@ class TestStreamingPipeline:
             for i in range(0, len(text), chunk_size):
                 time.sleep(0.05)
                 # Use modulo to keep byte value in valid range (0-255)
-                yield bytes([(i // chunk_size) % 256] * chunk_size)
+                yield bytes([(i + j) % 256 for j in range(chunk_size)])
         
         start = time.perf_counter()
         first_audio_time = None

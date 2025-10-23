@@ -61,7 +61,7 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements.txt \
 RUN pip install --no-cache-dir "ctranslate2<4.5.0"
 
 # Copy the application code
-COPY --chown=1001:1001 code/ ./code/
+COPY --chown=1001:1001 src/ ./src/
 
 # --- Stage 2: Runtime Stage ---
 # Base image still needs CUDA toolkit for PyTorch/DeepSpeed/etc in the app
@@ -93,14 +93,14 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 &
     update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
 
 # Set working directory for the application
-WORKDIR /app/code
+WORKDIR /app
 
 # Copy installed Python packages from the builder stage
 RUN mkdir -p /usr/local/lib/python3.10/dist-packages
 COPY --chown=1001:1001 --from=builder /usr/local/lib/python3.10/dist-packages /usr/local/lib/python3.10/dist-packages
 
 # Copy the application code from the builder stage
-COPY --chown=1001:1001 --from=builder /app/code /app/code
+COPY --chown=1001:1001 --from=builder /app/src /app/src
 
 # <<<--- Keep other model pre-downloads --->>>
 # <<<--- Silero VAD Pre-download --->>>
@@ -138,11 +138,11 @@ RUN echo "Preloading faster_whisper model: ${WHISPER_MODEL}" && \
 RUN echo "Preloading SentenceFinishedClassification model..." && \
     # Note: Downloads happen as root
     python3 -c "from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification; \
-                print('Downloading tokenizer...'); \
-                tokenizer = DistilBertTokenizerFast.from_pretrained('KoljaB/SentenceFinishedClassification'); \
-                print('Downloading classification model...'); \
-                model = DistilBertForSequenceClassification.from_pretrained('KoljaB/SentenceFinishedClassification'); \
-                print('Model downloads successful.')" \
+    print('Downloading tokenizer...'); \
+    tokenizer = DistilBertTokenizerFast.from_pretrained('KoljaB/SentenceFinishedClassification'); \
+    print('Downloading classification model...'); \
+    model = DistilBertForSequenceClassification.from_pretrained('KoljaB/SentenceFinishedClassification'); \
+    print('Model downloads successful.')" \
     || (echo "Sentence Classifier download failed" && exit 1)
 
 
@@ -189,4 +189,4 @@ EXPOSE 8000
 # Set the entrypoint script - This runs as root
 ENTRYPOINT ["/entrypoint.sh"]
 # Define the default command - This is passed as "$@" to the entrypoint script
-CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8000"]

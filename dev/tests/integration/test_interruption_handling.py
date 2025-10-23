@@ -14,7 +14,7 @@ from unittest.mock import Mock, MagicMock, patch
 import sys
 
 # Add parent directory to path to import code modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'code'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 # Mark all tests as integration tests
 pytestmark = pytest.mark.integration
@@ -441,7 +441,18 @@ class TestZombieProcessDetection:
         
         # Terminate it
         proc.terminate()
-        proc.wait(timeout=1.0)
+        try:
+            proc.wait(timeout=5.0)
+        except Exception:
+            # If still not terminated, kill it
+            proc.kill()
+            proc.wait(timeout=5.0)
+        
+        # Ensure process is fully terminated before checking for zombies
+        for _ in range(10):
+            if proc.poll() is not None:
+                break
+            time.sleep(0.2)
         
         # Verify it's not a zombie
         zombies = process_tracker.check_zombies()

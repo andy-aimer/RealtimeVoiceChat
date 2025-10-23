@@ -19,7 +19,7 @@ sys.modules['torch.nn'] = MagicMock()
 sys.modules['torch.nn.functional'] = MagicMock()
 
 # Add parent directory to path to import code modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'code'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from turndetect import (
     TurnDetection,

@@ -65,7 +65,7 @@ import time
 
 def test_no_orphaned_threads():
     """Verify TurnDetector threads cleaned up after use"""
-    from code.turndetect import TurnDetector
+    from src.turndetect import TurnDetector
 
     initial_threads = threading.active_count()
 

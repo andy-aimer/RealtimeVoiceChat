@@ -17,14 +17,15 @@ venv/
 env/
 .venv/
 ENV/
+venv-py312/
 
-# Documentation
+# Development files
+dev/
 *.md
 !README.md
-docs/
 
-# Tests
-tests/
+# Tests (now in dev/)
+dev/tests/
 
 # IDEs
 .vscode/
@@ -44,6 +45,15 @@ logs/
 *.tmp
 *.bak
 coverage/
+
+# Development directories
+monitoring/
+production/
+deployment/
+nginx/
+wheels/
+code_backup/
+.specify/
 
 # macOS
 .DS_Store

@@ -131,8 +131,10 @@ class TestLLMThrottling:
         llm = LLM("ollama", "test-model")
         llm.enable_thermal_monitoring(trigger_threshold=85.0, resume_threshold=80.0, check_interval=0.2)
         
-        # Trigger thermal protection
-        llm.pause_inference()
+        # Simulate temperature above threshold to trigger thermal protection
+        thermal_monitor = llm._thermal_monitor
+        thermal_monitor._simulate_temperature(90.0)
+        time.sleep(0.3)  # Wait for monitoring thread to detect
         
         # Attempt to generate text - should be blocked
         # Mock the lazy initialization to avoid actual LLM connection

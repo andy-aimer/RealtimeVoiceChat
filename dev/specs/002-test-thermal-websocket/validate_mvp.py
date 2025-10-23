@@ -185,8 +185,8 @@ def validate_sc003_coverage(project_root: Path) -> ValidationResult:
     cmd = [
         sys.executable, "-m", "pytest",
         "tests/unit/test_thread_cleanup.py",
-        "--cov=code.utils.lifecycle",
-        "--cov=code.turndetect",
+        "--cov=src.utils.lifecycle",
+        "--cov=src.turndetect",
         "--cov-report=term-missing",
         "--cov-report=html:htmlcov",
         "-v"

@@ -235,7 +235,7 @@ class TestUnicodeEdgeCases:
                 assert "\x00" not in data.text
                 # Verify text content is preserved (without nulls)
                 expected = text.replace("\x00", "")
-                assert data.text == expected or len(data.text) > 0
+                assert data.text == expected
             except PydanticValidationError:
                 # It's acceptable to reject null bytes entirely
                 pass

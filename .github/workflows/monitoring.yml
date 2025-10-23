@@ -8,7 +8,7 @@ on:
       - "src/metrics.py"
       - "src/monitoring/**"
       - "src/exceptions.py"
-      - "tests/integration/test_monitoring.py"
+      - "dev/tests/integration/test_monitoring.py"
   pull_request:
     branches: [main, develop]
     paths:
@@ -38,11 +38,11 @@ jobs:
 
       - name: Run standalone monitoring tests
         run: |
-          python test_monitoring_standalone.py
+          python dev/scripts/test_monitoring_standalone.py
 
       - name: Start test monitoring server
         run: |
-          python test_server_monitoring.py &
+          python dev/scripts/test_server_monitoring.py &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
 

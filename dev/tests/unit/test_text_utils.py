@@ -9,7 +9,7 @@ import sys
 import os
 
 # Add parent directory to path to import code modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'code'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from text_similarity import TextSimilarity
 from text_context import TextContext
