@@ -144,8 +144,19 @@ class AudioInputProcessor:
             Returns an array of zeros if the input is silent.
         """
         raw_audio = np.frombuffer(raw_bytes, dtype=np.int16)
+        
+        # Debug: log audio level periodically
+        max_val = np.max(np.abs(raw_audio))
+        if hasattr(self, '_audio_chunk_counter'):
+            self._audio_chunk_counter += 1
+        else:
+            self._audio_chunk_counter = 0
+            
+        if self._audio_chunk_counter % 50 == 0:  # Log every 50 chunks
+            rms = np.sqrt(np.mean(raw_audio.astype(np.float32)**2))
+            logger.info(f"👂📊 Audio level - Max: {max_val}, RMS: {rms:.1f}")
 
-        if np.max(np.abs(raw_audio)) == 0:
+        if max_val == 0:
             # Calculate expected length after resampling for silence
             expected_len = int(np.ceil(len(raw_audio) / self._RESAMPLE_RATIO))
             return np.zeros(expected_len, dtype=np.int16)

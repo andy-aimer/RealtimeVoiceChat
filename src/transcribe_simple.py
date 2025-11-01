@@ -97,13 +97,22 @@ class SimpleTranscriptionProcessor:
                 else:
                     audio_data = audio_data.astype(np.float32)
             
-            # Transcribe
+            # Check audio RMS level for debugging
+            rms = np.sqrt(np.mean(audio_data**2))
+            logger.debug(f"🎤📊 Audio RMS level: {rms:.6f}")
+            
+            # Transcribe with less aggressive VAD
             segments, info = self.model.transcribe(
                 audio_data,
                 language=self.language if self.language != "auto" else None,
-                beam_size=3,
+                beam_size=5,
                 vad_filter=True,
-                vad_parameters=dict(min_silence_duration_ms=500)
+                vad_parameters=dict(
+                    threshold=0.3,  # Lower threshold (more sensitive)
+                    min_speech_duration_ms=100,  # Shorter minimum speech
+                    min_silence_duration_ms=1000,  # Longer before cutting
+                    speech_pad_ms=200  # More padding around speech
+                )
             )
             
             # Combine segments
