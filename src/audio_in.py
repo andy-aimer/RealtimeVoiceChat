@@ -3,9 +3,16 @@ import logging
 from typing import Optional, Callable
 import numpy as np
 from scipy.signal import resample_poly
-from transcribe import TranscriptionProcessor
 
 logger = logging.getLogger(__name__)
+
+# Try to import RealtimeSTT-based transcription, fall back to simple version
+try:
+    from transcribe import TranscriptionProcessor
+    logger.info("Using full RealtimeSTT transcription processor")
+except ImportError as e:
+    from transcribe_simple import SimpleTranscriptionProcessor as TranscriptionProcessor
+    logger.warning(f"RealtimeSTT not available ({e}), using simple transcription processor")
 
 
 class AudioInputProcessor:

@@ -9,12 +9,25 @@ from queue import Queue
 from typing import Callable, Generator, Optional
 
 import numpy as np
-from huggingface_hub import hf_hub_download
-# Assuming RealtimeTTS is installed and available
-from RealtimeTTS import (CoquiEngine, KokoroEngine, OrpheusEngine,
-                         OrpheusVoice, TextToAudioStream)
 
 logger = logging.getLogger(__name__)
+
+# Try to import RealtimeTTS, fall back to simple version
+try:
+    from RealtimeTTS import (CoquiEngine, KokoroEngine, OrpheusEngine,
+                             OrpheusVoice, TextToAudioStream)
+    from huggingface_hub import hf_hub_download
+    logger.info("Using full RealtimeTTS audio processor")
+    HAS_REALTIMETTS = True
+except ImportError as e:
+    logger.warning(f"RealtimeTTS not available ({e}), using simple TTS processor")
+    from tts_simple import (CoquiEngine, KokoroEngine, OrpheusEngine,
+                            OrpheusVoice, TextToAudioStream)
+    # Define a dummy hf_hub_download for compatibility
+    def hf_hub_download(*args, **kwargs):
+        logger.warning("huggingface_hub not available, skipping model download")
+        return None
+    HAS_REALTIMETTS = False
 
 # Default configuration constants
 START_ENGINE = "kokoro"
