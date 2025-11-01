@@ -113,6 +113,16 @@ class SimpleTranscriptionProcessor:
         except Exception as e:
             logger.error(f"Error processing audio chunk: {e}")
     
+    def transcribe_loop(self):
+        """
+        Main transcription loop (compatibility method for audio_in.py)
+        This is called repeatedly by AudioInputProcessor
+        """
+        # Since we don't have a real-time streaming model like RealtimeSTT,
+        # we just sleep briefly and let the audio processor handle chunks
+        # The actual transcription happens in process_audio_chunk when called
+        time.sleep(0.1)
+        
     # Compatibility methods for existing code
     def feed_audio(self, audio_data):
         """Feed audio data (compatibility method)"""
