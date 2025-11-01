@@ -278,10 +278,72 @@ const FRAME_BYTES   = BATCH_SAMPLES * 2;
 const MESSAGE_BYTES = HEADER_BYTES + FRAME_BYTES;
 
 const bufferPool = [];
-let batchBuffer = null;
-let batchView = null;
-let batchInt16 = null;
-let batchOffset = 0;
+let batchSendBuffer = null;
+let batchInt16      = null;
+let batchHeader     = null;
+let batchOffset     = 0;
+
+// Audio visualizer variables
+const audioCanvas = document.getElementById('audioCanvas');
+const audioCtx = audioCanvas.getContext('2d');
+const audioVisualizer = document.getElementById('audioVisualizer');
+let analyserNode = null;
+let visualizerAnimationId = null;
+
+// Audio visualizer functions
+function drawAudioSpectrum() {
+  if (!analyserNode) return;
+  
+  visualizerAnimationId = requestAnimationFrame(drawAudioSpectrum);
+  
+  const bufferLength = analyserNode.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  analyserNode.getByteFrequencyData(dataArray);
+  
+  const width = audioCanvas.width;
+  const height = audioCanvas.height;
+  
+  audioCtx.fillStyle = '#2c3e50';
+  audioCtx.fillRect(0, 0, width, height);
+  
+  const barCount = 64; // Number of bars to display
+  const barWidth = width / barCount;
+  const step = Math.floor(bufferLength / barCount);
+  
+  for (let i = 0; i < barCount; i++) {
+    const barHeight = (dataArray[i * step] / 255) * height;
+    
+    // Create gradient for bars
+    const gradient = audioCtx.createLinearGradient(0, height, 0, height - barHeight);
+    gradient.addColorStop(0, '#3498db');
+    gradient.addColorStop(0.5, '#2ecc71');
+    gradient.addColorStop(1, '#e74c3c');
+    
+    audioCtx.fillStyle = gradient;
+    audioCtx.fillRect(i * barWidth + 1, height - barHeight, barWidth - 2, barHeight);
+  }
+}
+
+function startVisualizer() {
+  if (analyserNode && !visualizerAnimationId) {
+    audioVisualizer.style.display = 'flex';
+    drawAudioSpectrum();
+  }
+}
+
+function stopVisualizer() {
+  if (visualizerAnimationId) {
+    cancelAnimationFrame(visualizerAnimationId);
+    visualizerAnimationId = null;
+  }
+  audioVisualizer.style.display = 'none';
+  
+  // Clear canvas
+  const width = audioCanvas.width;
+  const height = audioCanvas.height;
+  audioCtx.fillStyle = '#2c3e50';
+  audioCtx.fillRect(0, 0, width, height);
+}
 
 function initBatch() {
   if (!batchBuffer) {
@@ -369,7 +431,19 @@ async function startRawPcmCapture() {
     };
 
     const source = audioContext.createMediaStreamSource(stream);
-    source.connect(micWorkletNode);
+    
+    // Create analyser for visualization
+    analyserNode = audioContext.createAnalyser();
+    analyserNode.fftSize = 2048;
+    analyserNode.smoothingTimeConstant = 0.8;
+    
+    // Connect: source -> analyser -> worklet
+    source.connect(analyserNode);
+    analyserNode.connect(micWorkletNode);
+    
+    // Start visualizer
+    startVisualizer();
+    
     statusDiv.textContent = "Recording...";
   } catch (err) {
     statusDiv.textContent = "Mic access denied.";
@@ -408,6 +482,12 @@ async function setupTTSPlayback() {
 }
 
 function cleanupAudio() {
+  stopVisualizer();
+  
+  if (analyserNode) {
+    analyserNode.disconnect();
+    analyserNode = null;
+  }
   if (micWorkletNode) {
     micWorkletNode.disconnect();
     micWorkletNode = null;
@@ -641,6 +721,7 @@ document.getElementById("stopBtn").onclick = () => {
     wsClient = null;
   }
   cleanupAudio();
+  stopVisualizer();
   updateConnectionStatus('stopped', 'Stopped.');
 };
 
