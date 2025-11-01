@@ -27,6 +27,12 @@ class SimpleTranscriptionProcessor:
         self.is_recording = False
         self.is_listening = False
         
+        # Audio buffer for accumulating chunks
+        self.audio_buffer = []
+        self.buffer_duration = 0  # in samples
+        self.min_buffer_samples = 16000 * 2  # 2 seconds minimum
+        self.max_buffer_samples = 16000 * 30  # 30 seconds maximum
+        
         # Callbacks
         self.transcription_callback = None
         self.realtime_callback = None
@@ -97,21 +103,51 @@ class SimpleTranscriptionProcessor:
     
     def process_audio_chunk(self, audio_chunk: bytes):
         """
-        Process incoming audio chunk (placeholder for WebSocket audio)
+        Process incoming audio chunk - accumulate and transcribe when buffer is full
         """
         try:
             # Convert bytes to numpy array
             audio_np = np.frombuffer(audio_chunk, dtype=np.int16)
             
-            # For real-time processing, you might want to accumulate audio
-            # and transcribe when silence is detected or buffer is full
-            if len(audio_np) > 16000:  # At least 1 second of audio
-                text = self.transcribe_audio(audio_np)
+            # Add to buffer
+            self.audio_buffer.append(audio_np)
+            self.buffer_duration += len(audio_np)
+            
+            # Transcribe when we have enough audio
+            if self.buffer_duration >= self.min_buffer_samples:
+                logger.info(f"🎤 Transcribing buffer with {self.buffer_duration} samples ({self.buffer_duration/16000:.1f}s)")
+                
+                # Concatenate all buffered audio
+                full_audio = np.concatenate(self.audio_buffer)
+                
+                # Transcribe
+                text = self.transcribe_audio(full_audio)
+                
+                if text:
+                    logger.info(f"🎤✅ Transcribed: {text}")
+                    if self.transcription_callback:
+                        self.transcription_callback(text)
+                    if self.realtime_callback:
+                        self.realtime_callback(text)
+                else:
+                    logger.debug("🎤 No text transcribed")
+                
+                # Clear buffer after transcription
+                self.audio_buffer = []
+                self.buffer_duration = 0
+            
+            # Prevent buffer from growing too large
+            elif self.buffer_duration >= self.max_buffer_samples:
+                logger.warning(f"🎤⚠️ Buffer too large ({self.buffer_duration} samples), forcing transcription")
+                full_audio = np.concatenate(self.audio_buffer)
+                text = self.transcribe_audio(full_audio)
                 if text and self.transcription_callback:
                     self.transcription_callback(text)
+                self.audio_buffer = []
+                self.buffer_duration = 0
                     
         except Exception as e:
-            logger.error(f"Error processing audio chunk: {e}")
+            logger.error(f"Error processing audio chunk: {e}", exc_info=True)
     
     def transcribe_loop(self):
         """
@@ -136,7 +172,9 @@ class SimpleTranscriptionProcessor:
     
     def clear_audio_queue(self):
         """Clear audio queue (compatibility method)"""
-        pass
+        self.audio_buffer = []
+        self.buffer_duration = 0
+        logger.debug("🎤 Audio buffer cleared")
     
     def shutdown(self):
         """Shutdown the processor"""
