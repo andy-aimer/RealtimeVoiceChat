@@ -476,6 +476,22 @@ function handleJSONMessage({ type, content }) {
     renderMessages();
     return;
   }
+  // T037: Handle voice change notifications from server
+  if (type === "voice_changed") {
+    const voiceId = content;
+    console.log(`🎤📢 Voice change notification received: ${voiceId}`);
+    
+    // Update dropdown to reflect the change
+    const voiceSelect = document.getElementById('voiceSelect');
+    if (voiceSelect) {
+      voiceSelect.value = voiceId;
+    }
+    
+    // Show notification in chat
+    addMessage('system', `Voice changed to: ${voiceId}`);
+    return;
+  }
+  
   if (type === "tts_chunk") {
     if (ignoreIncomingTTS) return;
     const int16Data = base64ToInt16Array(content);
@@ -640,3 +656,88 @@ document.getElementById("copyBtn").onclick = () => {
 
 // First render
 renderMessages();
+
+// =============================================================================
+// T036: Voice Selection Feature
+// =============================================================================
+
+/**
+ * Fetches available voices from /tts/voices endpoint and populates dropdown
+ */
+async function loadVoices() {
+  const voiceSelect = document.getElementById('voiceSelect');
+  
+  try {
+    const response = await fetch('/tts/voices');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Clear loading option
+    voiceSelect.innerHTML = '';
+    
+    // Populate dropdown with available voices
+    data.voices.forEach(voice => {
+      const option = document.createElement('option');
+      option.value = voice.voice_id;
+      option.textContent = `${voice.display_name} (${voice.gender})`;
+      
+      // Mark default voice as selected
+      if (voice.voice_id === data.default_voice) {
+        option.selected = true;
+      }
+      
+      voiceSelect.appendChild(option);
+    });
+    
+    console.log(`🎤 Loaded ${data.voices.length} voices, default: ${data.default_voice}`);
+  } catch (error) {
+    console.error('Failed to load voices:', error);
+    voiceSelect.innerHTML = '<option value="">Voice selection unavailable</option>';
+  }
+}
+
+/**
+ * Handles voice selection change by calling PATCH /tts/config endpoint
+ */
+async function changeVoice(voiceId) {
+  try {
+    const response = await fetch('/tts/config', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        default_voice: voiceId
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log(`🎤✅ Voice changed to: ${result.current_config.default_voice}`);
+    
+    // T037: Voice change will be communicated via WebSocket message
+    addMessage('system', `Voice changed to: ${voiceId}`);
+    
+  } catch (error) {
+    console.error('Failed to change voice:', error);
+    addMessage('system', `Failed to change voice: ${error.message}`);
+  }
+}
+
+// Voice select dropdown handler
+document.getElementById('voiceSelect').addEventListener('change', (event) => {
+  const selectedVoice = event.target.value;
+  if (selectedVoice) {
+    changeVoice(selectedVoice);
+  }
+});
+
+// Load voices when page loads
+loadVoices();

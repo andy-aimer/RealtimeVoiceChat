@@ -1,7 +1,10 @@
 # speech to text and text to speech
-# Note: Using Python 3.12 for compatibility (realtimetts/TTS requires Python <3.13)
+# Note: Using Python 3.12 for compatibility
 realtimestt==0.3.104
-realtimetts[kokoro,coqui,orpheus]==0.5.5
+# Piper TTS integration (replaced RealtimeTTS)
+piper-tts>=1.2.0
+onnxruntime>=1.16.0
+aiofiles>=23.0.0
 
 # webserver dependencies
 fastapi

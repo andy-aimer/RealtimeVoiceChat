@@ -1,0 +1,8 @@
+{
+  "engine": "piper",
+  "default_voice": "en_US-amy-medium",
+  "model_path": "models/piper",
+  "thread_count": 3,
+  "sample_rate": 22050,
+  "streaming_enabled": true
+}
