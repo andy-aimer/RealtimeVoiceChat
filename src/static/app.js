@@ -338,7 +338,7 @@ async function startRawPcmCapture() {
         sampleRate: { ideal: 24000 },
         channelCount: 1,
         echoCancellation: true,
-        // autoGainControl: true,
+        autoGainControl: true,  // Enable auto gain control to amplify quiet audio
         noiseSuppression: true
       }
     });
