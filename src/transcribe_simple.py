@@ -30,8 +30,14 @@ class SimpleTranscriptionProcessor:
         # Audio buffer for accumulating chunks
         self.audio_buffer = []
         self.buffer_duration = 0  # in samples
-        self.min_buffer_samples = 16000 * 2  # 2 seconds minimum
+        self.min_buffer_samples = 16000 * 2  # 2 seconds minimum before transcribing
         self.max_buffer_samples = 16000 * 30  # 30 seconds maximum
+        
+        # Speech detection state
+        self.speech_buffer = []  # Accumulated speech across multiple transcriptions
+        self.silence_counter = 0  # Count consecutive silent buffers
+        self.silence_threshold = 2  # Number of silent buffers before finalizing
+        self.has_speech = False  # Track if we've seen any speech
         
         # Callbacks (matching RealtimeSTT interface)
         self.transcription_callback = None
@@ -110,7 +116,8 @@ class SimpleTranscriptionProcessor:
     
     def process_audio_chunk(self, audio_chunk: bytes):
         """
-        Process incoming audio chunk - accumulate and transcribe when buffer is full
+        Process incoming audio chunk with speech/silence detection
+        Accumulates speech across multiple chunks and only finalizes when silence is detected
         """
         try:
             # Convert bytes to numpy array
@@ -131,19 +138,40 @@ class SimpleTranscriptionProcessor:
                 text = self.transcribe_audio(full_audio)
                 
                 if text:
-                    logger.info(f"🎤✅ Transcribed: {text}")
-                    # Call full_transcription_callback (matches RealtimeSTT interface)
-                    if self.full_transcription_callback:
-                        self.full_transcription_callback(text)
-                    # Also call legacy callbacks for compatibility
-                    if self.transcription_callback:
-                        self.transcription_callback(text)
+                    # Speech detected! Add to speech buffer
+                    logger.info(f"🎤✅ Transcribed chunk: {text}")
+                    self.speech_buffer.append(text)
+                    self.has_speech = True
+                    self.silence_counter = 0  # Reset silence counter
+                    
+                    # Send partial transcription to UI
+                    full_text = " ".join(self.speech_buffer)
                     if self.realtime_transcription_callback:
-                        self.realtime_transcription_callback(text)
+                        self.realtime_transcription_callback(full_text)
                 else:
-                    logger.debug("🎤 No text transcribed")
+                    # Silence detected
+                    logger.debug("🎤 No speech in buffer")
+                    if self.has_speech:
+                        self.silence_counter += 1
+                        logger.debug(f"🎤🔇 Silence counter: {self.silence_counter}/{self.silence_threshold}")
+                        
+                        # If we've seen enough silence, finalize the transcription
+                        if self.silence_counter >= self.silence_threshold:
+                            full_text = " ".join(self.speech_buffer).strip()
+                            logger.info(f"🎤🏁 Final transcription: {full_text}")
+                            
+                            # Call final transcription callback
+                            if self.full_transcription_callback:
+                                self.full_transcription_callback(full_text)
+                            if self.transcription_callback:
+                                self.transcription_callback(full_text)
+                            
+                            # Reset speech buffer
+                            self.speech_buffer = []
+                            self.has_speech = False
+                            self.silence_counter = 0
                 
-                # Clear buffer after transcription
+                # Clear audio buffer after each transcription attempt
                 self.audio_buffer = []
                 self.buffer_duration = 0
             
@@ -152,8 +180,8 @@ class SimpleTranscriptionProcessor:
                 logger.warning(f"🎤⚠️ Buffer too large ({self.buffer_duration} samples), forcing transcription")
                 full_audio = np.concatenate(self.audio_buffer)
                 text = self.transcribe_audio(full_audio)
-                if text and self.transcription_callback:
-                    self.transcription_callback(text)
+                if text:
+                    self.speech_buffer.append(text)
                 self.audio_buffer = []
                 self.buffer_duration = 0
                     
@@ -185,7 +213,10 @@ class SimpleTranscriptionProcessor:
         """Clear audio queue (compatibility method)"""
         self.audio_buffer = []
         self.buffer_duration = 0
-        logger.debug("🎤 Audio buffer cleared")
+        self.speech_buffer = []
+        self.silence_counter = 0
+        self.has_speech = False
+        logger.debug("🎤 Audio and speech buffers cleared")
     
     def shutdown(self):
         """Shutdown the processor"""
