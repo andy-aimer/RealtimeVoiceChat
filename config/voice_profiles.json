@@ -1,0 +1,40 @@
+{
+  "voices": [
+    {
+      "voice_id": "en_US-lessac-medium",
+      "display_name": "US English (Lessac)",
+      "language": "en-US",
+      "gender": "female",
+      "quality": "medium",
+      "model_file": "en_US-lessac-medium.onnx",
+      "config_file": "en_US-lessac-medium.onnx.json",
+      "file_size_mb": 52.3,
+      "sample_rate": 22050,
+      "is_loaded": false
+    },
+    {
+      "voice_id": "en_US-amy-medium",
+      "display_name": "US English (Amy)",
+      "language": "en-US",
+      "gender": "female",
+      "quality": "medium",
+      "model_file": "en_US-amy-medium.onnx",
+      "config_file": "en_US-amy-medium.onnx.json",
+      "file_size_mb": 51.8,
+      "sample_rate": 22050,
+      "is_loaded": false
+    },
+    {
+      "voice_id": "en_GB-alan-medium",
+      "display_name": "British English (Alan)",
+      "language": "en-GB",
+      "gender": "male",
+      "quality": "medium",
+      "model_file": "en_GB-alan-medium.onnx",
+      "config_file": "en_GB-alan-medium.onnx.json",
+      "file_size_mb": 50.1,
+      "sample_rate": 22050,
+      "is_loaded": false
+    }
+  ]
+}

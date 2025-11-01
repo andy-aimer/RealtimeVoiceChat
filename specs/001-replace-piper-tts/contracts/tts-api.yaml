@@ -1,0 +1,395 @@
+openapi: 3.0.3
+info:
+  title: RealtimeVoiceChat TTS API
+  description: Text-to-Speech API for Piper TTS integration
+  version: 1.0.0
+  contact:
+    name: RealtimeVoiceChat TTS API
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /tts/voices:
+    get:
+      summary: Get available TTS voices
+      description: Retrieve list of available Piper TTS voices with metadata
+      operationId: getAvailableVoices
+      tags:
+        - Voice Management
+      responses:
+        "200":
+          description: List of available voices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  voices:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/VoiceProfile"
+                  default_voice:
+                    type: string
+                    example: "en_US-lessac-medium"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /tts/synthesize:
+    post:
+      summary: Synthesize text to speech
+      description: Convert text to audio using selected Piper TTS voice
+      operationId: synthesizeText
+      tags:
+        - Speech Synthesis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TTSRequest"
+      responses:
+        "200":
+          description: Audio generation successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TTSResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "422":
+          $ref: "#/components/responses/ProcessingError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /tts/stream:
+    post:
+      summary: Stream text-to-speech synthesis
+      description: Generate streaming audio chunks for real-time playback
+      operationId: streamSynthesis
+      tags:
+        - Speech Synthesis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/TTSRequest"
+                - type: object
+                  properties:
+                    streaming:
+                      type: boolean
+                      default: true
+      responses:
+        "200":
+          description: Streaming audio chunks
+          content:
+            text/plain:
+              schema:
+                type: string
+                description: Server-sent events stream of audio chunks
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "422":
+          $ref: "#/components/responses/ProcessingError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /tts/config:
+    get:
+      summary: Get TTS configuration
+      description: Retrieve current TTS engine configuration
+      operationId: getTTSConfig
+      tags:
+        - Configuration
+      responses:
+        "200":
+          description: Current TTS configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TTSEngineConfig"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      summary: Update TTS configuration
+      description: Update TTS engine settings and default voice
+      operationId: updateTTSConfig
+      tags:
+        - Configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                default_voice:
+                  type: string
+                  example: "en_US-amy-medium"
+                thread_count:
+                  type: integer
+                  minimum: 1
+                  maximum: 4
+                  example: 3
+                streaming_enabled:
+                  type: boolean
+                  example: true
+      responses:
+        "200":
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TTSEngineConfig"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /tts/health:
+    get:
+      summary: TTS health check
+      description: Check TTS engine status and model availability
+      operationId: checkTTSHealth
+      tags:
+        - Health
+      responses:
+        "200":
+          description: TTS engine is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, unhealthy]
+                  models_loaded:
+                    type: integer
+                    example: 3
+                  available_voices:
+                    type: integer
+                    example: 3
+                  memory_usage_mb:
+                    type: number
+                    example: 245.6
+                  last_synthesis_ms:
+                    type: number
+                    example: 432.1
+        "503":
+          description: TTS engine unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "unhealthy"
+                  error:
+                    type: string
+                    example: "Voice models not loaded"
+
+components:
+  schemas:
+    VoiceProfile:
+      type: object
+      required:
+        - voice_id
+        - display_name
+        - language
+        - quality
+      properties:
+        voice_id:
+          type: string
+          example: "en_US-lessac-medium"
+          description: Unique voice identifier
+        display_name:
+          type: string
+          example: "US English (Lessac)"
+          description: Human-readable voice name
+        language:
+          type: string
+          example: "en-US"
+          description: Language code (ISO 639-1)
+        gender:
+          type: string
+          enum: [male, female, neutral]
+          example: "female"
+        quality:
+          type: string
+          enum: [low, medium, high]
+          example: "medium"
+        sample_rate:
+          type: integer
+          example: 22050
+          description: Native sample rate in Hz
+        file_size_mb:
+          type: number
+          example: 52.3
+          description: Model file size in megabytes
+        is_loaded:
+          type: boolean
+          example: true
+          description: Whether model is currently loaded
+
+    TTSRequest:
+      type: object
+      required:
+        - text
+        - voice_id
+      properties:
+        text:
+          type: string
+          maxLength: 2000
+          example: "Hello, this is a test of the Piper TTS system."
+          description: Text to synthesize
+        voice_id:
+          type: string
+          example: "en_US-lessac-medium"
+          description: Voice to use for synthesis
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 3
+          example: 1
+          description: Processing priority (1=high, 5=low)
+        streaming:
+          type: boolean
+          default: true
+          description: Enable streaming output
+        user_context:
+          type: string
+          example: "user_session_12345"
+          description: Optional user session context
+
+    TTSResponse:
+      type: object
+      properties:
+        request_id:
+          type: string
+          example: "req_67890abcdef"
+          description: Unique request identifier
+        audio_data:
+          type: string
+          format: byte
+          description: Base64-encoded audio data (WAV format)
+        sample_rate:
+          type: integer
+          example: 22050
+          description: Audio sample rate in Hz
+        duration_ms:
+          type: number
+          example: 2340.5
+          description: Audio duration in milliseconds
+        voice_used:
+          type: string
+          example: "en_US-lessac-medium"
+          description: Voice ID used for synthesis
+        processing_time_ms:
+          type: number
+          example: 432.1
+          description: Generation time in milliseconds
+        status:
+          type: string
+          enum: [completed, failed, partial]
+          example: "completed"
+
+    TTSEngineConfig:
+      type: object
+      properties:
+        engine_type:
+          type: string
+          example: "piper"
+          description: TTS engine type
+        default_voice:
+          type: string
+          example: "en_US-lessac-medium"
+          description: Default voice ID
+        model_path:
+          type: string
+          example: "src/models/piper"
+          description: Path to voice models
+        thread_count:
+          type: integer
+          example: 3
+          description: ONNX runtime thread count
+        sample_rate:
+          type: integer
+          example: 22050
+          description: Default sample rate
+        streaming_enabled:
+          type: boolean
+          example: true
+          description: Streaming synthesis enabled
+        available_voices:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoiceProfile"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Text exceeds maximum length of 2000 characters"
+            code: "VALIDATION_ERROR"
+            details:
+              field: "text"
+              max_length: 2000
+
+    ProcessingError:
+      description: TTS processing failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Voice model failed to generate audio"
+            code: "SYNTHESIS_ERROR"
+            details:
+              voice_id: "en_US-lessac-medium"
+              retry_available: true
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "TTS engine initialization failed"
+            code: "INTERNAL_ERROR"
+            details:
+              component: "piper_engine"
+
+tags:
+  - name: Voice Management
+    description: Manage available TTS voices
+  - name: Speech Synthesis
+    description: Text-to-speech synthesis operations
+  - name: Configuration
+    description: TTS engine configuration management
+  - name: Health
+    description: Health and status monitoring

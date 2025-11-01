@@ -126,6 +126,7 @@ class SpeechPipelineManager:
             llm_model: str = "hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M",
             no_think: bool = False,
             orpheus_model: str = "orpheus-3b-0.1-ft-Q8_0-GGUF/orpheus-3b-0.1-ft-q8_0.gguf",
+            piper_engine: Optional[any] = None,  # T021: Add piper_engine parameter
         ):
         """
         Initializes the SpeechPipelineManager.
@@ -135,17 +136,19 @@ class SpeechPipelineManager:
         measures initial inference latencies, and starts the background worker threads.
 
         Args:
-            tts_engine: The TTS engine to use (e.g., "kokoro", "orpheus").
+            tts_engine: The TTS engine to use (e.g., "kokoro", "orpheus", "piper").
             llm_provider: The LLM backend provider (e.g., "ollama").
             llm_model: The specific LLM model identifier.
             no_think: If True, removes specific thinking tags from LLM output.
             orpheus_model: Path or identifier for the Orpheus TTS model, if used.
+            piper_engine: Pre-initialized PiperTTSEngine instance (required if tts_engine is "piper").
         """
         self.tts_engine = tts_engine
         self.llm_provider = llm_provider
         self.llm_model = llm_model
         self.no_think = no_think
         self.orpheus_model = orpheus_model
+        self.piper_engine = piper_engine  # T021: Store piper engine reference
 
         self.system_prompt = system_prompt
         if tts_engine == "orpheus":
@@ -154,7 +157,8 @@ class SpeechPipelineManager:
         # --- Instance Dependencies ---
         self.audio = AudioProcessor(
             engine=self.tts_engine,
-            orpheus_model=self.orpheus_model
+            orpheus_model=self.orpheus_model,
+            piper_engine=self.piper_engine  # T021: Pass piper engine to AudioProcessor
         )
         self.audio.on_first_audio_chunk_synthesize = self.on_first_audio_chunk_synthesize
         self.text_similarity = TextSimilarity(focus='end', n_words=5)
@@ -169,7 +173,10 @@ class SpeechPipelineManager:
         )
         self.llm.prewarm()
         self.llm_inference_time = self.llm.measure_inference_time()
-        logger.debug(f"🗣️🧠🕒 LLM inference time: {self.llm_inference_time:.2f}ms")
+        if self.llm_inference_time is not None:
+            logger.debug(f"🗣️🧠🕒 LLM inference time: {self.llm_inference_time:.2f}ms")
+        else:
+            logger.debug("🗣️🧠🕒 LLM inference time: measurement failed")
 
         # --- State ---
         self.history = []
@@ -211,8 +218,14 @@ class SpeechPipelineManager:
 
         self.on_partial_assistant_text: Optional[Callable[[str], None]] = None
 
-        self.full_output_pipeline_latency = self.llm_inference_time + self.audio.tts_inference_time
-        logger.info(f"🗣️⏱️ Full output pipeline latency: {self.full_output_pipeline_latency:.2f}ms (LLM: {self.llm_inference_time:.2f}ms, TTS: {self.audio.tts_inference_time:.2f}ms)")
+        # Calculate full output pipeline latency (handle None values from failed measurements)
+        llm_time = self.llm_inference_time if self.llm_inference_time is not None else 0
+        tts_time = self.audio.tts_inference_time if self.audio.tts_inference_time is not None else 0
+        self.full_output_pipeline_latency = llm_time + tts_time
+        if llm_time > 0 and tts_time > 0:
+            logger.info(f"🗣️⏱️ Full output pipeline latency: {self.full_output_pipeline_latency:.2f}ms (LLM: {llm_time:.2f}ms, TTS: {tts_time:.2f}ms)")
+        else:
+            logger.warning(f"🗣️⏱️ Full output pipeline latency: {self.full_output_pipeline_latency:.2f}ms (measurement incomplete)")
 
         logger.info("🗣️🚀 SpeechPipelineManager initialized and workers started.")
 

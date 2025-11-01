@@ -46,9 +46,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse, Response, FileResponse
 
 USE_SSL = False
-TTS_START_ENGINE = "orpheus"
-TTS_START_ENGINE = "kokoro"
-TTS_START_ENGINE = "coqui"
+# TTS_START_ENGINE = "orpheus"
+# TTS_START_ENGINE = "kokoro"
+# TTS_START_ENGINE = "coqui"
+TTS_START_ENGINE = "piper"  # T017: Changed default engine to Piper TTS
 TTS_ORPHEUS_MODEL = "Orpheus_3B-1BaseGGUF/mOrpheus_3B-1Base_Q4_K_M.gguf"
 TTS_ORPHEUS_MODEL = "orpheus-3b-0.1-ft-Q8_0-GGUF/orpheus-3b-0.1-ft-q8_0.gguf"
 
@@ -82,6 +83,7 @@ if sys.platform == "win32":
 #from audio_out import AudioOutProcessor
 from audio_in import AudioInputProcessor
 from speech_pipeline_manager import SpeechPipelineManager
+from audio_module import PiperTTSEngine  # T021: Import Piper TTS engine
 from colors import Colors
 
 LANGUAGE = "en"
@@ -132,7 +134,25 @@ async def lifespan(app: FastAPI):
     Args:
         app: The FastAPI application instance.
     """
+    global TTS_START_ENGINE  # T021: Declare global to allow fallback reassignment
     logger.info("🖥️▶️ Server starting up")
+    
+    # T021: Initialize PiperTTSEngine if using Piper
+    piper_engine = None
+    if TTS_START_ENGINE == "piper":
+        try:
+            logger.info("🎤 Initializing Piper TTS engine...")
+            piper_engine = PiperTTSEngine(
+                model_path="models/piper",  # T021: Relative to src directory
+                config_path="../config/tts_config.json"  # T021: Relative to src directory
+            )
+            await piper_engine.initialize()
+            logger.info(f"🎤✅ Piper TTS engine initialized with {len(piper_engine.voice_profiles)} voices")
+        except Exception as e:
+            logger.error(f"🎤💥 Failed to initialize Piper TTS engine: {e}", exc_info=True)
+            logger.warning("🎤⚠️ Falling back to kokoro engine")
+            TTS_START_ENGINE = "kokoro"  # Fallback
+    
     # Initialize global components, not connection-specific state
     app.state.SpeechPipelineManager = SpeechPipelineManager(
         tts_engine=TTS_START_ENGINE,
@@ -140,6 +160,7 @@ async def lifespan(app: FastAPI):
         llm_model=LLM_START_MODEL,
         no_think=NO_THINK,
         orpheus_model=TTS_ORPHEUS_MODEL,
+        piper_engine=piper_engine,  # T021: Pass initialized Piper engine
     )
 
     app.state.Upsampler = UpsampleOverlap()
@@ -397,6 +418,277 @@ async def health_check():
                 "error": "Health check failed",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }),
+            status_code=500,
+            media_type="application/json"
+        )
+
+# --------------------------------------------------------------------
+# TTS API Endpoints (Phase 4: User Story 2 - T028, T029, T030)
+# --------------------------------------------------------------------
+
+@app.get("/tts/voices")
+async def get_tts_voices():
+    """
+    Get available TTS voices (T028).
+    
+    Returns list of available Piper TTS voices with metadata.
+    
+    Returns:
+        200: List of available voices with metadata
+        503: TTS engine not available
+    """
+    try:
+        # Check if Piper engine is available
+        if not hasattr(app.state, 'SpeechPipelineManager'):
+            return Response(
+                content=json.dumps({"error": "TTS engine not initialized"}),
+                status_code=503,
+                media_type="application/json"
+            )
+        
+        pipeline = app.state.SpeechPipelineManager
+        
+        # Check if using Piper engine
+        if pipeline.tts_engine != "piper" or not pipeline.piper_engine:
+            return Response(
+                content=json.dumps({
+                    "error": f"Piper TTS not active (current engine: {pipeline.tts_engine})",
+                    "current_engine": pipeline.tts_engine
+                }),
+                status_code=503,
+                media_type="application/json"
+            )
+        
+        # Get available voices from Piper engine
+        voice_profiles = pipeline.piper_engine.get_available_voices()
+        
+        # Convert VoiceProfile objects to dict
+        voices_data = []
+        for profile in voice_profiles:
+            voices_data.append({
+                "voice_id": profile.voice_id,
+                "display_name": profile.display_name,
+                "language": profile.language,
+                "gender": profile.gender,
+                "quality": profile.quality,
+                "sample_rate": profile.sample_rate,
+                "file_size_mb": round(profile.file_size_mb, 1),
+                "is_loaded": profile.is_loaded
+            })
+        
+        # Get default voice
+        default_voice = pipeline.piper_engine.current_voice_id
+        
+        response_data = {
+            "voices": voices_data,
+            "default_voice": default_voice,
+            "engine": "piper"
+        }
+        
+        return Response(
+            content=json.dumps(response_data),
+            status_code=200,
+            media_type="application/json"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get TTS voices: {e}", exc_info=True)
+        return Response(
+            content=json.dumps({"error": "Failed to retrieve voices"}),
+            status_code=500,
+            media_type="application/json"
+        )
+
+@app.get("/tts/config")
+async def get_tts_config():
+    """
+    Get current TTS configuration (T029).
+    
+    Returns current TTS engine settings and default voice.
+    
+    Returns:
+        200: Current TTS configuration
+        503: TTS engine not available
+    """
+    try:
+        if not hasattr(app.state, 'SpeechPipelineManager'):
+            return Response(
+                content=json.dumps({"error": "TTS engine not initialized"}),
+                status_code=503,
+                media_type="application/json"
+            )
+        
+        pipeline = app.state.SpeechPipelineManager
+        
+        # Base configuration
+        config_data = {
+            "engine_type": pipeline.tts_engine,
+        }
+        
+        # Add Piper-specific configuration
+        if pipeline.tts_engine == "piper" and pipeline.piper_engine:
+            piper_config = pipeline.piper_engine.config
+            config_data.update({
+                "default_voice": pipeline.piper_engine.current_voice_id,
+                "model_path": str(pipeline.piper_engine.model_path),
+                "thread_count": piper_config.thread_count if piper_config else 3,
+                "sample_rate": piper_config.sample_rate if piper_config else 22050,
+                "streaming_enabled": piper_config.streaming_enabled if piper_config else True,
+                "voices_loaded": len(pipeline.piper_engine.voices),
+                "voices_available": len(pipeline.piper_engine.voice_profiles)
+            })
+        
+        return Response(
+            content=json.dumps(config_data),
+            status_code=200,
+            media_type="application/json"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get TTS config: {e}", exc_info=True)
+        return Response(
+            content=json.dumps({"error": "Failed to retrieve configuration"}),
+            status_code=500,
+            media_type="application/json"
+        )
+
+from fastapi import Request as FastAPIRequest
+
+@app.patch("/tts/config")
+async def update_tts_config(request: FastAPIRequest):
+    """
+    Update TTS configuration (T030).
+    
+    Allows updating default voice and other TTS settings.
+    
+    Body parameters:
+        default_voice (str, optional): Voice ID to set as default
+        thread_count (int, optional): Number of threads for synthesis
+        streaming_enabled (bool, optional): Enable/disable streaming
+    
+    Returns:
+        200: Configuration updated successfully
+        400: Invalid parameters
+        503: TTS engine not available
+    """
+    try:
+        if not hasattr(app.state, 'SpeechPipelineManager'):
+            return Response(
+                content=json.dumps({"error": "TTS engine not initialized"}),
+                status_code=503,
+                media_type="application/json"
+            )
+        
+        pipeline = app.state.SpeechPipelineManager
+        
+        # Check if using Piper engine
+        if pipeline.tts_engine != "piper" or not pipeline.piper_engine:
+            return Response(
+                content=json.dumps({
+                    "error": f"Piper TTS not active (current engine: {pipeline.tts_engine})"
+                }),
+                status_code=503,
+                media_type="application/json"
+            )
+        
+        # Get request body
+        body = await request.json()
+        
+        updated_fields = []
+        
+        # Update default voice (T030, T032, T037, T038)
+        voice_changed = False
+        if "default_voice" in body:
+            new_voice = body["default_voice"]
+            try:
+                pipeline.piper_engine.set_voice(new_voice)
+                updated_fields.append(f"default_voice={new_voice}")
+                logger.info(f"🎤⚙️ TTS voice changed to: {new_voice}")  # T038
+                voice_changed = True
+                
+                # T037: Store voice change for WebSocket notification
+                # Note: Full broadcast would require a WebSocket connection manager
+                # For now, this demonstrates the notification structure
+                app.state.last_voice_change = {
+                    "type": "voice_changed",
+                    "content": new_voice,
+                    "timestamp": asyncio.get_event_loop().time()
+                }
+                
+            except ValueError as e:
+                return Response(
+                    content=json.dumps({"error": str(e)}),
+                    status_code=400,
+                    media_type="application/json"
+                )
+        
+        # Update thread count if provided
+        if "thread_count" in body:
+            thread_count = body["thread_count"]
+            if isinstance(thread_count, int) and 1 <= thread_count <= 4:
+                if pipeline.piper_engine.config:
+                    pipeline.piper_engine.config.thread_count = thread_count
+                    updated_fields.append(f"thread_count={thread_count}")
+                    logger.info(f"🎤⚙️ TTS thread count updated to: {thread_count}")  # T038
+            else:
+                return Response(
+                    content=json.dumps({"error": "thread_count must be between 1 and 4"}),
+                    status_code=400,
+                    media_type="application/json"
+                )
+        
+        # Update streaming enabled if provided
+        if "streaming_enabled" in body:
+            streaming = body["streaming_enabled"]
+            if isinstance(streaming, bool):
+                if pipeline.piper_engine.config:
+                    pipeline.piper_engine.config.streaming_enabled = streaming
+                    updated_fields.append(f"streaming_enabled={streaming}")
+                    logger.info(f"🎤⚙️ TTS streaming {'enabled' if streaming else 'disabled'}")  # T038
+        
+        # Persist configuration changes (T033)
+        if updated_fields:
+            try:
+                config_path = pipeline.piper_engine.config_path
+                config_data = {
+                    "engine": "piper",
+                    "default_voice": pipeline.piper_engine.current_voice_id,
+                    "model_path": str(pipeline.piper_engine.model_path),
+                    "thread_count": pipeline.piper_engine.config.thread_count if pipeline.piper_engine.config else 3,
+                    "sample_rate": pipeline.piper_engine.config.sample_rate if pipeline.piper_engine.config else 22050,
+                    "streaming_enabled": pipeline.piper_engine.config.streaming_enabled if pipeline.piper_engine.config else True
+                }
+                
+                with open(config_path, 'w') as f:
+                    json.dump(config_data, f, indent=2)
+                
+                logger.info(f"🎤💾 TTS configuration saved to {config_path}")  # T038
+                
+            except Exception as persist_err:
+                logger.warning(f"🎤⚠️ Failed to persist configuration: {persist_err}")
+        
+        # Return updated configuration
+        response_data = {
+            "status": "updated",
+            "updated_fields": updated_fields,
+            "current_config": {
+                "engine_type": "piper",
+                "default_voice": pipeline.piper_engine.current_voice_id,
+                "thread_count": pipeline.piper_engine.config.thread_count if pipeline.piper_engine.config else 3,
+                "streaming_enabled": pipeline.piper_engine.config.streaming_enabled if pipeline.piper_engine.config else True
+            }
+        }
+        
+        return Response(
+            content=json.dumps(response_data),
+            status_code=200,
+            media_type="application/json"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to update TTS config: {e}", exc_info=True)
+        return Response(
+            content=json.dumps({"error": "Failed to update configuration"}),
             status_code=500,
             media_type="application/json"
         )
