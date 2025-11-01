@@ -33,9 +33,16 @@ class SimpleTranscriptionProcessor:
         self.min_buffer_samples = 16000 * 2  # 2 seconds minimum
         self.max_buffer_samples = 16000 * 30  # 30 seconds maximum
         
-        # Callbacks
+        # Callbacks (matching RealtimeSTT interface)
         self.transcription_callback = None
         self.realtime_callback = None
+        self.full_transcription_callback = None
+        self.realtime_transcription_callback = None
+        self.potential_sentence_end = None
+        self.potential_full_transcription_callback = None
+        self.potential_full_transcription_abort_callback = None
+        self.before_final_sentence = None
+        self.on_tts_allowed_to_synthesize = None
         
         logger.info(f"Initializing simple transcription with model: {model_name}")
         
@@ -125,10 +132,14 @@ class SimpleTranscriptionProcessor:
                 
                 if text:
                     logger.info(f"🎤✅ Transcribed: {text}")
+                    # Call full_transcription_callback (matches RealtimeSTT interface)
+                    if self.full_transcription_callback:
+                        self.full_transcription_callback(text)
+                    # Also call legacy callbacks for compatibility
                     if self.transcription_callback:
                         self.transcription_callback(text)
-                    if self.realtime_callback:
-                        self.realtime_callback(text)
+                    if self.realtime_transcription_callback:
+                        self.realtime_transcription_callback(text)
                 else:
                     logger.debug("🎤 No text transcribed")
                 
