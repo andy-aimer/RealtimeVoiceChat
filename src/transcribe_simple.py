@@ -124,10 +124,15 @@ class SimpleTranscriptionProcessor:
         time.sleep(0.1)
         
     # Compatibility methods for existing code
-    def feed_audio(self, audio_data):
-        """Feed audio data (compatibility method)"""
-        if isinstance(audio_data, bytes):
-            self.process_audio_chunk(audio_data)
+    def feed_audio(self, audio_bytes, audio_array=None):
+        """
+        Feed audio data (compatibility method)
+        Args:
+            audio_bytes: Audio data as bytes
+            audio_array: Optional audio data as numpy array (ignored for now)
+        """
+        if isinstance(audio_bytes, bytes):
+            self.process_audio_chunk(audio_bytes)
     
     def clear_audio_queue(self):
         """Clear audio queue (compatibility method)"""
