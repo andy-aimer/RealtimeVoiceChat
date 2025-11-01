@@ -52,6 +52,11 @@ class AudioInputProcessor:
             is_orpheus=is_orpheus,
             pipeline_latency=pipeline_latency,
         )
+        
+        # Start the transcription processor (loads Whisper model)
+        if not self.transcriber.start():
+            logger.error("👂❌ Failed to start transcription processor")
+        
         # Flag to indicate if the transcription loop has failed fatally
         self._transcription_failed = False
         self.transcription_task = asyncio.create_task(self._run_transcription_loop())
