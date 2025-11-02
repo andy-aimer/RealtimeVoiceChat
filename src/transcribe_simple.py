@@ -101,18 +101,15 @@ class SimpleTranscriptionProcessor:
             rms = np.sqrt(np.mean(audio_data**2))
             logger.debug(f"🎤📊 Audio RMS level: {rms:.6f}")
             
-            # Transcribe with less aggressive VAD
+            # Transcribe WITHOUT VAD - we handle speech detection ourselves
+            # Using VAD causes hallucinations when it removes too much audio
             segments, info = self.model.transcribe(
                 audio_data,
                 language=self.language if self.language != "auto" else None,
                 beam_size=5,
-                vad_filter=True,
-                vad_parameters=dict(
-                    threshold=0.3,  # Lower threshold (more sensitive)
-                    min_speech_duration_ms=100,  # Shorter minimum speech
-                    min_silence_duration_ms=1000,  # Longer before cutting
-                    speech_pad_ms=200  # More padding around speech
-                )
+                vad_filter=False,  # Disabled - causes hallucinations
+                temperature=0.0,  # Use greedy decoding for more consistent results
+                condition_on_previous_text=False  # Avoid context bleeding
             )
             
             # Combine segments
@@ -138,13 +135,22 @@ class SimpleTranscriptionProcessor:
             
             # Transcribe when we have enough audio
             if self.buffer_duration >= self.min_buffer_samples:
-                logger.info(f"🎤 Transcribing buffer with {self.buffer_duration} samples ({self.buffer_duration/16000:.1f}s)")
-                
                 # Concatenate all buffered audio
                 full_audio = np.concatenate(self.audio_buffer)
                 
-                # Transcribe
-                text = self.transcribe_audio(full_audio)
+                # Check if audio has sufficient energy (not just silence/noise)
+                audio_float = full_audio.astype(np.float32) / 32768.0
+                rms = np.sqrt(np.mean(audio_float**2))
+                
+                # Only transcribe if RMS is above threshold (indicates actual speech)
+                if rms > 0.01:  # Threshold for actual speech vs silence/noise
+                    logger.info(f"🎤 Transcribing buffer with {self.buffer_duration} samples ({self.buffer_duration/16000:.1f}s, RMS: {rms:.4f})")
+                    
+                    # Transcribe
+                    text = self.transcribe_audio(full_audio)
+                else:
+                    logger.debug(f"🎤🔇 Skipping transcription - audio too quiet (RMS: {rms:.4f})")
+                    text = ""
                 
                 if text:
                     # Speech detected! Add to speech buffer
