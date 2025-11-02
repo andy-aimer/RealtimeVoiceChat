@@ -278,10 +278,10 @@ const FRAME_BYTES   = BATCH_SAMPLES * 2;
 const MESSAGE_BYTES = HEADER_BYTES + FRAME_BYTES;
 
 const bufferPool = [];
-let batchSendBuffer = null;
-let batchInt16      = null;
-let batchHeader     = null;
-let batchOffset     = 0;
+let batchBuffer = null;
+let batchView = null;
+let batchInt16 = null;
+let batchOffset = 0;
 
 // Audio visualizer variables
 const audioCanvas = document.getElementById('audioCanvas');
